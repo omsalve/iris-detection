@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import WebcamScanner from "../components/WebcamScanner";
 
 type Stage = "choose" | "iris" | "otp" | "granted" | "denied";
@@ -13,12 +12,14 @@ export default function AccessPage() {
   const [phone, setPhone] = useState("");
   const [otpCode, setOtpCode] = useState("");
   const [otpSent, setOtpSent] = useState(false);
+  const [scanning, setScanning] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
   const [confidence, setConfidence] = useState(0);
 
   const handleIrisScan = async (base64Image: string) => {
+    setScanning(false);
     setLoading(true);
     setError("");
     setStatus("Scanning iris pattern...");
@@ -35,15 +36,14 @@ export default function AccessPage() {
 
       if (data.matched) {
         setStatus("Match confirmed — notifying admin...");
-
         await fetch(`${API}/admin/alert`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ reason: "Visitor access granted via iris scan" }),
         }).catch(() => {});
-
         setTimeout(() => setStage("granted"), 1000);
       } else {
+        setStatus("No match found.");
         setTimeout(() => setStage("denied"), 800);
       }
     } catch {
@@ -55,57 +55,41 @@ export default function AccessPage() {
   };
 
   const handleSendOTP = async () => {
-    if (!phone) {
-      setError("Enter your phone number");
-      return;
-    }
-
+    if (!phone) { setError("Enter your phone number"); return; }
     setLoading(true);
     setError("");
-
     try {
       await fetch(`${API}/otp/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone }),
       });
-
       setOtpSent(true);
       setStatus("OTP sent — check your phone");
     } catch {
       setError("Failed to send OTP. Backend offline?");
     }
-
     setLoading(false);
   };
 
   const handleVerifyOTP = async () => {
-    if (!otpCode) {
-      setError("Enter the OTP code");
-      return;
-    }
-
+    if (!otpCode) { setError("Enter the OTP code"); return; }
     setLoading(true);
     setError("");
-
     try {
       const res = await fetch(`${API}/otp/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone, otp: otpCode }),
       });
-
       const data = await res.json();
-
       if (data.success) {
         setStatus("Verified — notifying admin...");
-
         await fetch(`${API}/admin/alert`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ reason: `Visitor access granted via OTP (${phone})` }),
         }).catch(() => {});
-
         setTimeout(() => setStage("granted"), 1000);
       } else {
         setTimeout(() => setStage("denied"), 500);
@@ -113,78 +97,241 @@ export default function AccessPage() {
     } catch {
       setError("Verification failed. Backend offline?");
     }
-
     setLoading(false);
   };
 
+  const resetIris = () => {
+    setScanning(false);
+    setLoading(false);
+    setError("");
+    setStatus("");
+    setStage("choose");
+  };
+
+  // Shared button style
+  const btn =
+    "w-full py-3 text-xs tracking-[0.2em] uppercase border transition-all duration-300 disabled:opacity-40 font-mono";
+  const btnGreen =
+    "border-[rgba(0,200,140,0.4)] text-[rgba(0,200,140,0.9)] hover:bg-[rgba(0,200,140,0.08)] hover:border-[rgba(0,200,140,0.8)]";
+  const btnWhite =
+    "border-[rgba(255,255,255,0.15)] text-[rgba(255,255,255,0.4)] hover:border-[rgba(255,255,255,0.3)] hover:text-[rgba(255,255,255,0.7)]";
+  const inputStyle =
+    "bg-transparent px-4 py-3 text-sm text-white outline-none border border-[rgba(0,200,140,0.2)] focus:border-[rgba(0,200,140,0.6)] transition-all w-full font-mono tracking-wide";
+
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center px-6" style={{ background: "#030a07" }}>
+    <main
+      className="min-h-screen flex flex-col items-center justify-center px-6 relative"
+      style={{ background: "#030a07", fontFamily: "monospace" }}
+    >
+      {/* Ambient glow */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background:
+            "radial-gradient(ellipse 60% 50% at 50% 50%, rgba(0,180,120,0.06) 0%, transparent 70%)",
+        }}
+      />
+
+      {/* ── CHOOSE METHOD ── */}
       {stage === "choose" && (
-        <div className="flex flex-col gap-4 w-full max-w-xs">
-          <button onClick={() => setStage("iris")} className="border p-4">
-            Iris Scan
+        <div className="flex flex-col gap-4 w-full max-w-xs relative z-10">
+          <p className="text-center text-[10px] tracking-[0.25em] uppercase mb-2"
+            style={{ color: "rgba(0,200,140,0.5)" }}>
+            Select Access Method
+          </p>
+          <button className={`${btn} ${btnGreen}`} onClick={() => setStage("iris")}>
+            👁 Iris Scan
           </button>
-          <button onClick={() => setStage("otp")} className="border p-4">
-            OTP
+          <button className={`${btn} ${btnWhite}`} onClick={() => setStage("otp")}>
+            📱 OTP Verification
           </button>
         </div>
       )}
 
+      {/* ── IRIS SCAN ── */}
       {stage === "iris" && (
-        <div className="flex flex-col gap-4 w-full max-w-xs">
-          <WebcamScanner
-  onCapture={(base64: string) => {
-    handleIrisScan(base64);
-  }}
-  isScanning={loading}
-/>
-          {status && <p>{status}</p>}
-          {error && <p>{error}</p>}
+        <div className="flex flex-col gap-4 w-full max-w-xs relative z-10">
+          <p className="text-center text-[10px] tracking-[0.25em] uppercase"
+            style={{ color: "rgba(0,200,140,0.5)" }}>
+            Iris Scan
+          </p>
 
-          <button onClick={() => setStage("choose")}>Back</button>
+          {/* Webcam container */}
+          <div
+            className="relative w-full aspect-square rounded-full overflow-hidden border"
+            style={{ borderColor: "rgba(0,200,140,0.3)" }}
+          >
+            {/* Scanning ring animation */}
+            {scanning && (
+              <div
+                className="absolute inset-0 rounded-full border-2 border-dashed animate-spin z-10 pointer-events-none"
+                style={{
+                  borderColor: "rgba(0,200,140,0.5)",
+                  animationDuration: "3s",
+                }}
+              />
+            )}
+            <WebcamScanner
+              onCapture={handleIrisScan}
+              isScanning={scanning}
+            />
+          </div>
+
+          {/* Scan trigger button */}
+          <button
+            className={`${btn} ${btnGreen}`}
+            disabled={loading || scanning}
+            onClick={() => {
+              setError("");
+              setStatus("");
+              setScanning(true);
+            }}
+          >
+            {loading ? "Processing..." : scanning ? "Capturing..." : "Scan Iris"}
+          </button>
+
+          {status && (
+            <p className="text-center text-[10px] tracking-widest uppercase"
+              style={{ color: "rgba(0,200,140,0.7)" }}>
+              ● {status}
+            </p>
+          )}
+          {error && (
+            <p className="text-center text-[10px] tracking-widest uppercase"
+              style={{ color: "rgba(255,80,80,0.8)" }}>
+              ✕ {error}
+            </p>
+          )}
+
+          <button className={`${btn} ${btnWhite}`} onClick={resetIris}>
+            ← Back
+          </button>
         </div>
       )}
 
+      {/* ── OTP ── */}
       {stage === "otp" && (
-        <div className="flex flex-col gap-4 w-full max-w-xs">
+        <div className="flex flex-col gap-4 w-full max-w-xs relative z-10">
+          <p className="text-center text-[10px] tracking-[0.25em] uppercase"
+            style={{ color: "rgba(0,200,140,0.5)" }}>
+            OTP Verification
+          </p>
+
           <input
+            className={inputStyle}
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
-            placeholder="Phone"
+            placeholder="+91XXXXXXXXXX"
+            disabled={otpSent}
           />
 
           {!otpSent ? (
-            <button onClick={handleSendOTP}>Send OTP</button>
+            <button className={`${btn} ${btnGreen}`} onClick={handleSendOTP} disabled={loading}>
+              {loading ? "Sending..." : "Send OTP"}
+            </button>
           ) : (
             <>
               <input
+                className={`${inputStyle} tracking-[0.4em] text-center`}
                 value={otpCode}
                 onChange={(e) => setOtpCode(e.target.value)}
-                placeholder="OTP"
+                placeholder="6-digit code"
+                maxLength={6}
               />
-              <button onClick={handleVerifyOTP}>Verify</button>
+              <button className={`${btn} ${btnGreen}`} onClick={handleVerifyOTP} disabled={loading}>
+                {loading ? "Verifying..." : "Verify OTP"}
+              </button>
+              <button
+                className="text-[9px] tracking-widest uppercase text-center transition-colors"
+                style={{ color: "rgba(255,255,255,0.2)" }}
+                onClick={() => { setOtpSent(false); setOtpCode(""); setStatus(""); }}
+              >
+                Change number
+              </button>
             </>
           )}
 
-          {status && <p>{status}</p>}
-          {error && <p>{error}</p>}
+          {status && (
+            <p className="text-center text-[10px] tracking-widest uppercase"
+              style={{ color: "rgba(0,200,140,0.7)" }}>
+              ● {status}
+            </p>
+          )}
+          {error && (
+            <p className="text-center text-[10px] tracking-widests uppercase"
+              style={{ color: "rgba(255,80,80,0.8)" }}>
+              ✕ {error}
+            </p>
+          )}
 
-          <button onClick={() => setStage("choose")}>Back</button>
+          <button
+            className={`${btn} ${btnWhite}`}
+            onClick={() => { setStage("choose"); setError(""); setStatus(""); setOtpSent(false); }}
+          >
+            ← Back
+          </button>
         </div>
       )}
 
+      {/* ── GRANTED ── */}
       {stage === "granted" && (
-        <div>
-          <h1>Access Granted</h1>
-          <p>Confidence: {confidence}%</p>
-          <button onClick={() => setStage("choose")}>Reset</button>
+        <div className="flex flex-col items-center gap-6 relative z-10">
+          <div
+            className="w-20 h-20 rounded-full flex items-center justify-center border"
+            style={{
+              borderColor: "rgba(0,200,140,0.5)",
+              background: "rgba(0,200,140,0.08)",
+              boxShadow: "0 0 40px rgba(0,200,140,0.2)",
+            }}
+          >
+            <span style={{ fontSize: "2rem" }}>✓</span>
+          </div>
+          <div className="text-center">
+            <h1 className="text-white font-light tracking-[0.3em] uppercase text-xl"
+              style={{ fontFamily: "Georgia, serif" }}>
+              Access Granted
+            </h1>
+            {confidence > 0 && (
+              <p className="mt-2 text-[10px] tracking-widest uppercase"
+                style={{ color: "rgba(0,200,140,0.5)" }}>
+                Confidence: {confidence}%
+              </p>
+            )}
+          </div>
+          <button className={`${btn} ${btnGreen} max-w-xs`} onClick={() => {
+            setStage("choose");
+            setConfidence(0);
+            setStatus("");
+          }}>
+            Reset
+          </button>
         </div>
       )}
 
+      {/* ── DENIED ── */}
       {stage === "denied" && (
-        <div>
-          <h1>Access Denied</h1>
-          <button onClick={() => setStage("choose")}>Try Again</button>
+        <div className="flex flex-col items-center gap-6 relative z-10">
+          <div
+            className="w-20 h-20 rounded-full flex items-center justify-center border"
+            style={{
+              borderColor: "rgba(255,60,60,0.4)",
+              background: "rgba(255,60,60,0.06)",
+              boxShadow: "0 0 40px rgba(255,60,60,0.15)",
+            }}
+          >
+            <span style={{ fontSize: "2rem" }}>✕</span>
+          </div>
+          <h1 className="text-white font-light tracking-[0.3em] uppercase text-xl"
+            style={{ fontFamily: "Georgia, serif" }}>
+            Access Denied
+          </h1>
+          <button className={`${btn} ${btnWhite} max-w-xs`} onClick={() => {
+            setStage("choose");
+            setStatus("");
+            setError("");
+          }}>
+            Try Again
+          </button>
         </div>
       )}
     </main>
