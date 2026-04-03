@@ -19,7 +19,6 @@ try:
         print("[SYSTEM] Authorized admin face loaded and encoded successfully!")
 except Exception as e:
     print(f"[WARNING] Could not load admin.jpg. Face recognition will fail. Error: {e}")
-
 def detect_iris(image_base64: str) -> dict:
     if MOCK_MODE:
         return {"matched": True, "confidence": 0.99, "message": "Mock Mode Active"}
