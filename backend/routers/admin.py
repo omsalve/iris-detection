@@ -1,15 +1,12 @@
-from fastapi import APIRouter
-from services.firebase_service import get_recent_logs, log_access
+from fastapi import APIRouter, Depends
+from services.auth_service import verify_firebase_token
+from services.firebase_service import get_recent_logs
 
 router = APIRouter()
 
+# The Depends(verify_firebase_token) acts as a bouncer for this route
 @router.get("/logs")
-async def get_logs():
-    logs = get_recent_logs(20)
+async def get_logs(user: dict = Depends(verify_firebase_token)):
+    print(f"User {user.get('email')} is fetching logs.")
+    logs = get_recent_logs(limit=20)
     return {"logs": logs}
-
-@router.post("/alert")
-async def send_alert(data: dict):
-    log_access(method="admin_alert", status="triggered", details=data.get("reason", ""))
-    # Hook Twilio SMS to admin here if needed
-    return {"message": "Alert logged"}
