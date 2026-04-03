@@ -1,28 +1,33 @@
 "use client";
 
-import { useState } from "react";
-import WebcamScanner from "../components/WebcamScanner";
+import { useState, useRef, useCallback } from "react";
+import WebcamScanner, { type WebcamScannerHandle } from "../components/WebcamScanner";
 
 type Stage = "choose" | "iris" | "otp" | "granted" | "denied";
 
 const API = "http://localhost:8000";
 
 export default function AccessPage() {
-  const [stage, setStage] = useState<Stage>("choose");
-  const [phone, setPhone] = useState("");
-  const [otpCode, setOtpCode] = useState("");
-  const [otpSent, setOtpSent] = useState(false);
-  const [scanning, setScanning] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [status, setStatus] = useState("");
+  const [stage,      setStage]      = useState<Stage>("choose");
+  const [phone,      setPhone]      = useState("");
+  const [otpCode,    setOtpCode]    = useState("");
+  const [otpSent,    setOtpSent]    = useState(false);
+  const [scanning,   setScanning]   = useState(false);
+  const [loading,    setLoading]    = useState(false);
+  const [error,      setError]      = useState("");
+  const [status,     setStatus]     = useState("");
   const [confidence, setConfidence] = useState(0);
+  const [overlayFrame,  setOverlayFrame]  = useState<string | null>(null);
+  const [snapshotUrl,   setSnapshotUrl]   = useState<string | null>(null);
 
-  const handleIrisScan = async (base64Image: string) => {
+  const scannerRef = useRef<WebcamScannerHandle>(null);
+
+  /* ── Iris scan handler ─────────────────────────────────────────── */
+  const handleIrisScan = useCallback(async (base64Image: string) => {
     setScanning(false);
     setLoading(true);
     setError("");
-    setStatus("Scanning iris pattern...");
+    setStatus("Analysing biometric data…");
 
     try {
       const res = await fetch(`${API}/iris/scan`, {
@@ -32,19 +37,24 @@ export default function AccessPage() {
       });
 
       const data = await res.json();
+
+      // Show the HUD overlay frame from backend
+      if (data.overlay_frame) setOverlayFrame(data.overlay_frame);
+      if (data.snapshot_url)  setSnapshotUrl(data.snapshot_url);
+
       setConfidence(Math.round(data.confidence * 100));
 
       if (data.matched) {
-        setStatus("Match confirmed — notifying admin...");
+        setStatus("Identity confirmed — notifying admin…");
         await fetch(`${API}/admin/alert`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ reason: "Visitor access granted via iris scan" }),
         }).catch(() => {});
-        setTimeout(() => setStage("granted"), 1000);
+        setTimeout(() => setStage("granted"), 1200);
       } else {
-        setStatus("No match found.");
-        setTimeout(() => setStage("denied"), 800);
+        setStatus("No biometric match detected.");
+        setTimeout(() => setStage("denied"), 900);
       }
     } catch {
       setError("Scanner offline. Backend not reachable.");
@@ -52,12 +62,12 @@ export default function AccessPage() {
     }
 
     setLoading(false);
-  };
+  }, []);
 
+  /* ── OTP handlers ──────────────────────────────────────────────── */
   const handleSendOTP = async () => {
     if (!phone) { setError("Enter your phone number"); return; }
-    setLoading(true);
-    setError("");
+    setLoading(true); setError("");
     try {
       await fetch(`${API}/otp/send`, {
         method: "POST",
@@ -66,16 +76,13 @@ export default function AccessPage() {
       });
       setOtpSent(true);
       setStatus("OTP sent — check your phone");
-    } catch {
-      setError("Failed to send OTP. Backend offline?");
-    }
+    } catch { setError("Failed to send OTP. Backend offline?"); }
     setLoading(false);
   };
 
   const handleVerifyOTP = async () => {
     if (!otpCode) { setError("Enter the OTP code"); return; }
-    setLoading(true);
-    setError("");
+    setLoading(true); setError("");
     try {
       const res = await fetch(`${API}/otp/verify`, {
         method: "POST",
@@ -84,7 +91,7 @@ export default function AccessPage() {
       });
       const data = await res.json();
       if (data.success) {
-        setStatus("Verified — notifying admin...");
+        setStatus("Verified — notifying admin…");
         await fetch(`${API}/admin/alert`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -94,29 +101,21 @@ export default function AccessPage() {
       } else {
         setTimeout(() => setStage("denied"), 500);
       }
-    } catch {
-      setError("Verification failed. Backend offline?");
-    }
+    } catch { setError("Verification failed. Backend offline?"); }
     setLoading(false);
   };
 
   const resetIris = () => {
-    setScanning(false);
-    setLoading(false);
-    setError("");
-    setStatus("");
+    setScanning(false); setLoading(false); setError(""); setStatus("");
+    setOverlayFrame(null); setSnapshotUrl(null);
     setStage("choose");
   };
 
-  // Shared button style
-  const btn =
-    "w-full py-3 text-xs tracking-[0.2em] uppercase border transition-all duration-300 disabled:opacity-40 font-mono";
-  const btnGreen =
-    "border-[rgba(0,200,140,0.4)] text-[rgba(0,200,140,0.9)] hover:bg-[rgba(0,200,140,0.08)] hover:border-[rgba(0,200,140,0.8)]";
-  const btnWhite =
-    "border-[rgba(255,255,255,0.15)] text-[rgba(255,255,255,0.4)] hover:border-[rgba(255,255,255,0.3)] hover:text-[rgba(255,255,255,0.7)]";
-  const inputStyle =
-    "bg-transparent px-4 py-3 text-sm text-white outline-none border border-[rgba(0,200,140,0.2)] focus:border-[rgba(0,200,140,0.6)] transition-all w-full font-mono tracking-wide";
+  /* ── Shared styles ─────────────────────────────────────────────── */
+  const btn      = "w-full py-3 text-xs tracking-[0.2em] uppercase border transition-all duration-300 disabled:opacity-40 font-mono";
+  const btnGreen = "border-[rgba(0,200,140,0.4)] text-[rgba(0,200,140,0.9)] hover:bg-[rgba(0,200,140,0.08)] hover:border-[rgba(0,200,140,0.8)]";
+  const btnWhite = "border-[rgba(255,255,255,0.15)] text-[rgba(255,255,255,0.4)] hover:border-[rgba(255,255,255,0.3)] hover:text-[rgba(255,255,255,0.7)]";
+  const inputSty = "bg-transparent px-4 py-3 text-sm text-white outline-none border border-[rgba(0,200,140,0.2)] focus:border-[rgba(0,200,140,0.6)] transition-all w-full font-mono tracking-wide";
 
   return (
     <main
@@ -126,10 +125,7 @@ export default function AccessPage() {
       {/* Ambient glow */}
       <div
         className="absolute inset-0 pointer-events-none"
-        style={{
-          background:
-            "radial-gradient(ellipse 60% 50% at 50% 50%, rgba(0,180,120,0.06) 0%, transparent 70%)",
-        }}
+        style={{ background: "radial-gradient(ellipse 60% 50% at 50% 50%, rgba(0,180,120,0.06) 0%, transparent 70%)" }}
       />
 
       {/* ── CHOOSE METHOD ── */}
@@ -156,38 +152,55 @@ export default function AccessPage() {
             Iris Scan
           </p>
 
-          {/* Webcam container */}
+          {/* Webcam + overlay container */}
           <div
             className="relative w-full aspect-square rounded-full overflow-hidden border"
             style={{ borderColor: "rgba(0,200,140,0.3)" }}
           >
-            {/* Scanning ring animation */}
+            {/* Outer spinning ring during scan */}
             {scanning && (
               <div
                 className="absolute inset-0 rounded-full border-2 border-dashed animate-spin z-10 pointer-events-none"
-                style={{
-                  borderColor: "rgba(0,200,140,0.5)",
-                  animationDuration: "3s",
-                }}
+                style={{ borderColor: "rgba(0,200,140,0.5)", animationDuration: "3s" }}
               />
             )}
+
             <WebcamScanner
+              ref={scannerRef}
               onCapture={handleIrisScan}
               isScanning={scanning}
+              overlayFrame={overlayFrame}
             />
           </div>
 
-          {/* Scan trigger button */}
+          {/* Eye snapshot thumbnail — shown after scan */}
+          {snapshotUrl && snapshotUrl.startsWith("http") && (
+            <div className="flex flex-col gap-1">
+              <p className="text-[9px] tracking-[0.2em] uppercase text-center"
+                style={{ color: "rgba(0,200,140,0.4)" }}>
+                Eye Snapshot Captured
+              </p>
+              <div
+                className="w-full overflow-hidden border"
+                style={{ borderColor: "rgba(0,200,140,0.2)", maxHeight: "80px" }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={snapshotUrl}
+                  alt="Eye scan snapshot"
+                  className="w-full object-cover"
+                  style={{ filter: "hue-rotate(100deg) saturate(0.6) brightness(0.9)" }}
+                />
+              </div>
+            </div>
+          )}
+
           <button
             className={`${btn} ${btnGreen}`}
             disabled={loading || scanning}
-            onClick={() => {
-              setError("");
-              setStatus("");
-              setScanning(true);
-            }}
+            onClick={() => { setError(""); setStatus(""); setOverlayFrame(null); setScanning(true); }}
           >
-            {loading ? "Processing..." : scanning ? "Capturing..." : "Scan Iris"}
+            {loading ? "Processing…" : scanning ? "Capturing…" : "Scan Iris"}
           </button>
 
           {status && (
@@ -218,7 +231,7 @@ export default function AccessPage() {
           </p>
 
           <input
-            className={inputStyle}
+            className={inputSty}
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             placeholder="+91XXXXXXXXXX"
@@ -227,19 +240,19 @@ export default function AccessPage() {
 
           {!otpSent ? (
             <button className={`${btn} ${btnGreen}`} onClick={handleSendOTP} disabled={loading}>
-              {loading ? "Sending..." : "Send OTP"}
+              {loading ? "Sending…" : "Send OTP"}
             </button>
           ) : (
             <>
               <input
-                className={`${inputStyle} tracking-[0.4em] text-center`}
+                className={`${inputSty} tracking-[0.4em] text-center`}
                 value={otpCode}
                 onChange={(e) => setOtpCode(e.target.value)}
                 placeholder="6-digit code"
                 maxLength={6}
               />
               <button className={`${btn} ${btnGreen}`} onClick={handleVerifyOTP} disabled={loading}>
-                {loading ? "Verifying..." : "Verify OTP"}
+                {loading ? "Verifying…" : "Verify OTP"}
               </button>
               <button
                 className="text-[9px] tracking-widest uppercase text-center transition-colors"
@@ -286,22 +299,45 @@ export default function AccessPage() {
           >
             <span style={{ fontSize: "2rem" }}>✓</span>
           </div>
-          <div className="text-center">
+
+          <div className="text-center flex flex-col gap-2">
             <h1 className="text-white font-light tracking-[0.3em] uppercase text-xl"
               style={{ fontFamily: "Georgia, serif" }}>
               Access Granted
             </h1>
             {confidence > 0 && (
-              <p className="mt-2 text-[10px] tracking-widest uppercase"
+              <p className="text-[10px] tracking-widest uppercase"
                 style={{ color: "rgba(0,200,140,0.5)" }}>
                 Confidence: {confidence}%
               </p>
             )}
+
+            {/* Snapshot displayed on granted screen */}
+            {snapshotUrl && snapshotUrl.startsWith("http") && (
+              <div className="mt-2 flex flex-col gap-1 items-center">
+                <p className="text-[9px] tracking-[0.2em] uppercase"
+                  style={{ color: "rgba(0,200,140,0.35)" }}>
+                  Eye Scan Stored
+                </p>
+                <div
+                  className="overflow-hidden border"
+                  style={{ borderColor: "rgba(0,200,140,0.15)", width: "120px" }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={snapshotUrl}
+                    alt="Stored eye scan"
+                    className="w-full object-cover"
+                    style={{ filter: "hue-rotate(100deg) saturate(0.5) brightness(0.85)" }}
+                  />
+                </div>
+              </div>
+            )}
           </div>
+
           <button className={`${btn} ${btnGreen} max-w-xs`} onClick={() => {
-            setStage("choose");
-            setConfidence(0);
-            setStatus("");
+            setStage("choose"); setConfidence(0); setStatus("");
+            setOverlayFrame(null); setSnapshotUrl(null);
           }}>
             Reset
           </button>
@@ -326,9 +362,8 @@ export default function AccessPage() {
             Access Denied
           </h1>
           <button className={`${btn} ${btnWhite} max-w-xs`} onClick={() => {
-            setStage("choose");
-            setStatus("");
-            setError("");
+            setStage("choose"); setStatus(""); setError("");
+            setOverlayFrame(null); setSnapshotUrl(null);
           }}>
             Try Again
           </button>
