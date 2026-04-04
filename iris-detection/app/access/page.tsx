@@ -5,7 +5,7 @@ import WebcamScanner, { type WebcamScannerHandle } from "../components/WebcamSca
 
 type Stage = "choose" | "iris" | "otp" | "granted" | "denied";
 
-const API = "https://iris-detection-production.up.railway.app"
+const API = "https://iris-detection-production.up.railway.app";
 
 export default function AccessPage() {
   const [stage,      setStage]      = useState<Stage>("choose");

@@ -3,8 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
+const API = "https://iris-detection-production.up.railway.app"
 type LogEntry = {
   id: string;
   method: "iris" | "otp" | "admin_alert" | "admin_override";
