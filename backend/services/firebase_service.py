@@ -1,18 +1,29 @@
 import firebase_admin
 from firebase_admin import credentials, firestore
 import os
+import json
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# Initialize Firebase only once
+import json
+
 if not firebase_admin._apps:
+    creds_json = os.getenv("FIREBASE_CREDENTIALS_JSON")
     cred_path = os.getenv("FIREBASE_CREDENTIALS_PATH", "./firebase_credentials.json")
-    if os.path.exists(cred_path):
+    
+    if creds_json:
+        cred = credentials.Certificate(json.loads(creds_json))
+    elif os.path.exists(cred_path):
         cred = credentials.Certificate(cred_path)
+    else:
+        cred = None
+    
+    if cred:
         firebase_admin.initialize_app(cred)
 
+        
 def get_db():
     return firestore.client()
 
