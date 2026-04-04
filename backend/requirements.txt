@@ -10,4 +10,14 @@ numpy
 firebase-admin
 twilio
 python-dotenv
+python-multipartcmake
+wheel
+setuptools
+fastapi
+uvicorn
+opencv-python-headless
+numpy
+firebase-admin
+twilio
+python-dotenv
 python-multipart
