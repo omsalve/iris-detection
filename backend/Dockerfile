@@ -16,10 +16,10 @@ WORKDIR /app
 
 RUN pip install --upgrade pip setuptools wheel
 
-RUN pip install cmake
-
+# Build dlib with the cmake policy flag to fix compatibility with cmake >= 3.5
+ENV CMAKE_POLICY_VERSION_MINIMUM=3.5
 RUN pip install dlib==19.24.2 \
-    --config-settings="cmake.args=-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
+    --config-settings="cmake.define.CMAKE_POLICY_DEFAULT_CMP0148=OLD"
 
 RUN pip install face-recognition==1.3.0
 
