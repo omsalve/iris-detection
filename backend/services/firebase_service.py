@@ -1,7 +1,7 @@
 import firebase_admin
 from firebase_admin import credentials, firestore
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -23,7 +23,7 @@ def log_access(method: str, status: str, details: str = ""):
             "method": method,
             "status": status,
             "details": details,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         })
     except Exception as e:
         print(f"[Firebase] Logging failed: {e}")
@@ -50,7 +50,7 @@ def save_face_encoding(person_id: str, name: str, encoding: list):
         db.collection("registered_faces").document(person_id).set({
             "name": name,
             "encoding": encoding,
-            "enrolled_at": datetime.utcnow().isoformat()
+            "enrolled_at": datetime.now(timezone.utc).isoformat()
         })
     except Exception as e:
         print(f"[Firebase] Save encoding failed: {e}")
