@@ -38,3 +38,26 @@ def get_recent_logs(limit: int = 20):
     except Exception as e:
         print(f"[Firebase] Fetch failed: {e}")
         return []
+    
+def get_all_face_encodings():
+    db = get_db()
+    docs = db.collection("registered_faces").stream()
+    return [{"id": doc.id, **doc.to_dict()} for doc in docs]
+
+def save_face_encoding(person_id: str, name: str, encoding: list):
+    try:
+        db = get_db()
+        db.collection("registered_faces").document(person_id).set({
+            "name": name,
+            "encoding": encoding,
+            "enrolled_at": datetime.utcnow().isoformat()
+        })
+    except Exception as e:
+        print(f"[Firebase] Save encoding failed: {e}")
+
+def delete_face_encoding(person_id: str):
+    try:
+        db = get_db()
+        db.collection("registered_faces").document(person_id).delete()
+    except Exception as e:
+        print(f"[Firebase] Delete encoding failed: {e}")
