@@ -5,7 +5,7 @@ import WebcamScanner, { type WebcamScannerHandle } from "../components/WebcamSca
 
 type Stage = "choose" | "iris" | "otp" | "granted" | "denied";
 
-const API = "http://localhost:8000";
+const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
 export default function AccessPage() {
   const [stage,      setStage]      = useState<Stage>("choose");
