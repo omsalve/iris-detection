@@ -1,4 +1,8 @@
-dlib @ https://github.com/z-mahmud22/Dlib_Windows_Python3.x/releases/download/v19.24.1/dlib-19.24.1-cp311-cp311-linux_x86_64.whl
+cmake
+wheel
+setuptools
+dlib==19.24.2
+face-recognition==1.3.0
 fastapi
 uvicorn
 opencv-python-headless
@@ -7,4 +11,3 @@ firebase-admin
 twilio
 python-dotenv
 python-multipart
-face-recognition==1.3.0
