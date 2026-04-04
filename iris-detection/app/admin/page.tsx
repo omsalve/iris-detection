@@ -40,20 +40,45 @@ const METHOD_LABEL = {
   admin_override: "Admin Override",
 };
 
-function timeAgo(iso: string) {
-  const secs = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+function parseTimestamp(timestamp: any): Date {
+  // Handle Firestore timestamp object format
+  if (timestamp && typeof timestamp === "object" && "_seconds" in timestamp) {
+    return new Date(timestamp._seconds * 1000);
+  }
+  // Handle ISO string format - ensure it's treated as UTC
+  if (typeof timestamp === "string") {
+    // If it's ISO format without Z, add Z to indicate UTC
+    let isoString = timestamp;
+    if (isoString && !isoString.endsWith("Z")) {
+      isoString = isoString + "Z";
+    }
+    return new Date(isoString);
+  }
+  // Handle number (milliseconds)
+  if (typeof timestamp === "number") {
+    return new Date(timestamp);
+  }
+  return new Date();
+}
+
+function timeAgo(timestamp: any): string {
+  const date = parseTimestamp(timestamp);
+  const secs = Math.floor((Date.now() - date.getTime()) / 1000);
   if (secs < 60) return `${secs}s ago`;
   if (secs < 3600) return `${Math.floor(secs / 60)}m ago`;
   if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`;
   return `${Math.floor(secs / 86400)}d ago`;
 }
 
-function fmt(iso: string) {
-  return new Date(iso).toLocaleString("en-IN", {
+function fmt(timestamp: any): string {
+  const date = parseTimestamp(timestamp);
+  // toLocaleString will automatically convert UTC to browser's local timezone
+  return date.toLocaleString("en-IN", {
     day: "2-digit",
     month: "short",
     hour: "2-digit",
     minute: "2-digit",
+    hour12: true,
   });
 }
 

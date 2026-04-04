@@ -25,23 +25,6 @@ type LogEntry = {
   location: string;
 };
 
-const SEED_PEOPLE: Person[] = [
-  { id: "1", name: "Arjun Mehta",  phone: "+91 98765 43210", irisDate: "2025-03-10", lastSeen: "2025-03-31T08:42:00Z", location: "Front Door", initials: "AM", status: "active" },
-  { id: "2", name: "Priya Sharma", phone: "+91 91234 56789", irisDate: "2025-03-12", lastSeen: "2025-03-30T19:15:00Z", location: "Front Door", initials: "PS", status: "active" },
-  { id: "3", name: "Rohan Das",    phone: "+91 99887 76655", irisDate: "2025-03-15", lastSeen: "2025-03-28T11:03:00Z", location: "Front Door", initials: "RD", status: "active" },
-  { id: "4", name: "Kavya Nair",   phone: "+91 87654 32109", irisDate: "2025-03-20", lastSeen: "2025-03-25T14:30:00Z", location: "Front Door", initials: "KN", status: "inactive" },
-];
-
-const SEED_LOGS: LogEntry[] = [
-  { id: "1", method: "iris",        status: "granted",   timestamp: new Date(Date.now() - 40000).toISOString(),   location: "Front Door" },
-  { id: "2", method: "otp",         status: "granted",   timestamp: new Date(Date.now() - 120000).toISOString(),  location: "Front Door" },
-  { id: "3", method: "iris",        status: "denied",    timestamp: new Date(Date.now() - 300000).toISOString(),  location: "Front Door" },
-  { id: "4", method: "iris",        status: "granted",   timestamp: new Date(Date.now() - 600000).toISOString(),  location: "Front Door" },
-  { id: "5", method: "admin_alert", status: "triggered", timestamp: new Date(Date.now() - 900000).toISOString(),  location: "System" },
-  { id: "6", method: "otp",         status: "denied",    timestamp: new Date(Date.now() - 1800000).toISOString(), location: "Front Door" },
-  { id: "7", method: "iris",        status: "granted",   timestamp: new Date(Date.now() - 3600000).toISOString(), location: "Front Door" },
-];
-
 function timeAgo(iso: string) {
   const secs = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
   if (secs < 60) return `${secs}s ago`;
@@ -323,8 +306,8 @@ function EnrollModal({ onClose, onSuccess }: {
 // Main Dashboard
 // ─────────────────────────────────────────────
 export default function Dashboard() {
-  const [people, setPeople]               = useState<Person[]>(SEED_PEOPLE);
-  const [logs, setLogs]                   = useState<LogEntry[]>(SEED_LOGS);
+  const [people, setPeople]               = useState<Person[]>([]);
+  const [logs, setLogs]                   = useState<LogEntry[]>([]);
   const [selected, setSelected]           = useState<Person | null>(null);
   const [showEnroll, setShowEnroll]       = useState(false);
   const [showConfirmDel, setShowConfirmDel] = useState(false);
