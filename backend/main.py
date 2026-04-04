@@ -6,7 +6,11 @@ app = FastAPI(title="IrisGuard API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://iris-guard.vercel.app/", "http://localhost:3000"],
+    allow_origins=[
+    "http://localhost:3000",
+    "https://iris-guard.vercel.app",
+    "https://iris-guard-1ccpkegis-om-salves-projects.vercel.app",
+],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
