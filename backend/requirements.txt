@@ -6,3 +6,4 @@ firebase-admin
 twilio
 python-dotenv
 python-multipart
+face-recognition
