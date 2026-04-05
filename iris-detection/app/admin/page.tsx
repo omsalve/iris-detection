@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 
-const API = "https://iris-detection-production.up.railway.app"
+const API = "https://realomsalve-iris-guard.hf.space";
 type LogEntry = {
   id: string;
   method: "iris" | "otp" | "admin_alert" | "admin_override";
