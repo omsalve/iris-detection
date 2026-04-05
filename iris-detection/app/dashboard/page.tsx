@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { getAuth } from "firebase/auth";
 
@@ -14,7 +14,7 @@ type Person = {
   location: string;
   initials: string;
   status: "active" | "inactive";
-  firestoreId?: string; // real ID from backend enrollment
+  firestoreId?: string;
 };
 
 type LogEntry = {
@@ -45,59 +45,53 @@ const METHOD_LABEL: Record<string, string> = {
 };
 
 // ─────────────────────────────────────────────
-// Enroll Modal — self-contained with its own
-// webcam lifecycle so it doesn't pollute the
-// parent component at all
+// Enroll Modal — file upload, no camera
 // ─────────────────────────────────────────────
 function EnrollModal({ onClose, onSuccess }: {
   onClose: () => void;
   onSuccess: (person: Person) => void;
 }) {
-  const [name, setName]           = useState("");
-  const [phone, setPhone]         = useState("");
+  const [name, setName]                   = useState("");
+  const [phone, setPhone]                 = useState("");
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
-  const [enrolling, setEnrolling] = useState(false);
-  const [error, setError]         = useState("");
-  const [camReady, setCamReady]   = useState(false);
+  const [enrolling, setEnrolling]         = useState(false);
+  const [error, setError]                 = useState("");
+  const [dragging, setDragging]           = useState(false);
 
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Start camera when modal mounts
-  useEffect(() => {
-    let active = true;
-    navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } } })
-      .then((stream) => {
-        if (!active) { stream.getTracks().forEach((t) => t.stop()); return; }
-        streamRef.current = stream;
-        if (videoRef.current) videoRef.current.srcObject = stream;
-        setCamReady(true);
-      })
-      .catch(() => setError("Camera access denied."));
-
-    // Stop camera when modal unmounts
-    return () => {
-      active = false;
-      streamRef.current?.getTracks().forEach((t) => t.stop());
+  const processFile = (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      setError("Please upload an image file.");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setError("Image must be under 10MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setCapturedImage(e.target?.result as string);
+      setError("");
     };
-  }, []);
+    reader.readAsDataURL(file);
+  };
 
-  const capture = useCallback(() => {
-    if (!videoRef.current) return;
-    const canvas = document.createElement("canvas");
-    canvas.width  = videoRef.current.videoWidth;
-    canvas.height = videoRef.current.videoHeight;
-    canvas.getContext("2d")?.drawImage(videoRef.current, 0, 0);
-    setCapturedImage(canvas.toDataURL("image/jpeg", 0.9));
-    setError("");
-  }, []);
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) processFile(file);
+  };
 
-  const retake = () => setCapturedImage(null);
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) processFile(file);
+  };
 
   const handleSubmit = async () => {
-    if (!name.trim())     { setError("Enter a name."); return; }
-    if (!capturedImage)   { setError("Capture a photo first."); return; }
+    if (!name.trim())   { setError("Enter a name."); return; }
+    if (!capturedImage) { setError("Upload a photo first."); return; }
 
     setEnrolling(true);
     setError("");
@@ -106,13 +100,17 @@ function EnrollModal({ onClose, onSuccess }: {
       const auth  = getAuth();
       const token = await auth.currentUser?.getIdToken();
 
+      const base64 = capturedImage.includes(",")
+        ? capturedImage.split(",")[1]
+        : capturedImage;
+
       const res = await fetch(`${API}/enroll`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ name: name.trim(), image_base64: capturedImage }),
+        body: JSON.stringify({ name: name.trim(), image_base64: base64 }),
       });
 
       const data = await res.json();
@@ -158,98 +156,75 @@ function EnrollModal({ onClose, onSuccess }: {
           <button onClick={onClose} className="text-[10px] uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.2)" }}>✕</button>
         </div>
 
-        {/* Webcam / Preview */}
-        <div className="relative w-full bg-black" style={{ aspectRatio: "4/3" }}>
-          {/* Live feed — hidden once captured */}
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            className="w-full h-full object-cover"
-            style={{ display: capturedImage ? "none" : "block" }}
-          />
-
-          {/* Captured still */}
-          {capturedImage && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={capturedImage}
-              alt="Captured face"
-              className="w-full h-full object-cover"
-              style={{ filter: "hue-rotate(100deg) saturate(0.4) brightness(0.9)" }}
-            />
-          )}
-
-          {/* Camera not ready overlay */}
-          {!camReady && !capturedImage && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-[9px] tracking-widest uppercase" style={{ color: "rgba(0,200,140,0.4)" }}>
-                Initialising camera…
-              </span>
-            </div>
-          )}
-
-          {/* Face guide reticle — shown on live feed only */}
-          {!capturedImage && camReady && (
-            <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-              <div
-                className="rounded-full border-2"
-                style={{
-                  width: "45%",
-                  aspectRatio: "1",
-                  borderColor: "rgba(0,200,140,0.5)",
-                  boxShadow: "0 0 0 9999px rgba(0,0,0,0.35)",
-                }}
-              />
-              <span
-                className="absolute bottom-3 text-[9px] tracking-widest uppercase"
-                style={{ color: "rgba(0,200,140,0.6)" }}
-              >
-                Centre face inside circle
-              </span>
-            </div>
-          )}
-
-          {/* Captured badge */}
-          {capturedImage && (
-            <div
-              className="absolute top-2 left-2 px-2 py-1 text-[8px] tracking-widest uppercase"
-              style={{ background: "rgba(0,200,140,0.15)", color: "rgba(0,200,140,0.9)", border: "1px solid rgba(0,200,140,0.3)" }}
-            >
-              ✓ Photo captured
-            </div>
-          )}
-        </div>
-
-        {/* Camera controls */}
-        <div className="px-6 py-3 border-b" style={{ borderColor: "rgba(0,200,140,0.08)" }}>
+        {/* Upload Area */}
+        <div className="px-6 pt-6 pb-4">
           {!capturedImage ? (
-            <button
-              onClick={capture}
-              disabled={!camReady}
-              className="w-full py-2.5 text-[9px] tracking-[0.2em] uppercase border transition-all disabled:opacity-30"
-              style={{ borderColor: "rgba(0,200,140,0.4)", color: "rgba(0,200,140,0.9)" }}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(0,200,140,0.08)"; }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              onDrop={handleDrop}
+              onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+              onDragLeave={() => setDragging(false)}
+              className="relative w-full flex flex-col items-center justify-center cursor-pointer transition-all"
+              style={{
+                border: `2px dashed ${dragging ? "rgba(0,200,140,0.7)" : "rgba(0,200,140,0.25)"}`,
+                background: dragging ? "rgba(0,200,140,0.05)" : "rgba(0,200,140,0.02)",
+                borderRadius: "2px",
+                minHeight: "180px",
+                gap: "10px",
+              }}
             >
-              ⊙ Capture Photo
-            </button>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"
+                  stroke="rgba(0,200,140,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                <polyline points="17 8 12 3 7 8"
+                  stroke="rgba(0,200,140,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                <line x1="12" y1="3" x2="12" y2="15"
+                  stroke="rgba(0,200,140,0.5)" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+              <div className="text-center flex flex-col gap-1">
+                <span className="text-[11px] tracking-widest uppercase" style={{ color: "rgba(0,200,140,0.7)" }}>
+                  Click or drop photo here
+                </span>
+                <span className="text-[9px] tracking-widest uppercase" style={{ color: "rgba(255,255,255,0.15)" }}>
+                  JPG · PNG · WEBP — max 10MB
+                </span>
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+            </div>
           ) : (
-            <button
-              onClick={retake}
-              className="w-full py-2.5 text-[9px] tracking-[0.2em] uppercase border transition-all"
-              style={{ borderColor: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.4)" }}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.03)"; }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
-            >
-              ↺ Retake
-            </button>
+            <div className="relative w-full overflow-hidden" style={{ borderRadius: "2px", border: "1px solid rgba(0,200,140,0.2)" }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={capturedImage}
+                alt="Preview"
+                className="w-full object-cover"
+                style={{ maxHeight: "200px", filter: "hue-rotate(100deg) saturate(0.4) brightness(0.9)", objectFit: "cover" }}
+              />
+              <div
+                className="absolute top-2 left-2 px-2 py-1 text-[8px] tracking-widest uppercase"
+                style={{ background: "rgba(0,200,140,0.15)", color: "rgba(0,200,140,0.9)", border: "1px solid rgba(0,200,140,0.3)" }}
+              >
+                ✓ Photo ready
+              </div>
+              <button
+                onClick={() => { setCapturedImage(null); setError(""); }}
+                className="absolute top-2 right-2 px-2 py-1 text-[8px] tracking-widest uppercase"
+                style={{ background: "rgba(3,10,7,0.8)", color: "rgba(255,255,255,0.4)", border: "1px solid rgba(255,255,255,0.1)" }}
+              >
+                ✕ Remove
+              </button>
+            </div>
           )}
         </div>
 
         {/* Form fields */}
-        <div className="px-6 py-4 flex flex-col gap-3">
+        <div className="px-6 pb-4 flex flex-col gap-3">
           <input
             type="text"
             placeholder="Full name *"
@@ -303,20 +278,18 @@ function EnrollModal({ onClose, onSuccess }: {
 }
 
 
-
 // ─────────────────────────────────────────────
 // Main Dashboard
 // ─────────────────────────────────────────────
 export default function Dashboard() {
-  const [people, setPeople]               = useState<Person[]>([]);
-  const [logs, setLogs]                   = useState<LogEntry[]>([]);
-  const [selected, setSelected]           = useState<Person | null>(null);
-  const [showEnroll, setShowEnroll]       = useState(false);
+  const [people, setPeople]                 = useState<Person[]>([]);
+  const [logs, setLogs]                     = useState<LogEntry[]>([]);
+  const [selected, setSelected]             = useState<Person | null>(null);
+  const [showEnroll, setShowEnroll]         = useState(false);
   const [showConfirmDel, setShowConfirmDel] = useState(false);
-  const [now, setNow]                     = useState("");
-  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [now, setNow]                       = useState("");
+  const [deleteLoading, setDeleteLoading]   = useState(false);
 
-  // Clock
   useEffect(() => {
     const tick = () =>
       setNow(new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
@@ -325,7 +298,6 @@ export default function Dashboard() {
     return () => clearInterval(id);
   }, []);
 
-  // Fetch real logs once on mount
   useEffect(() => {
     fetch(`${API}/admin/logs`)
       .then((r) => r.json())
@@ -341,8 +313,6 @@ export default function Dashboard() {
   const handleDelete = async () => {
     if (!selected) return;
     setDeleteLoading(true);
-
-    // If person was enrolled via backend, delete from Firestore too
     if (selected.firestoreId) {
       try {
         const auth  = getAuth();
@@ -351,11 +321,8 @@ export default function Dashboard() {
           method: "DELETE",
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
-      } catch {
-        // Non-blocking — still remove from UI
-      }
+      } catch { /* non-blocking */ }
     }
-
     setPeople((prev) => prev.filter((p) => p.id !== selected.id));
     setSelected(null);
     setShowConfirmDel(false);
@@ -467,7 +434,7 @@ export default function Dashboard() {
                 onMouseLeave={(e) => { if (selected?.id !== p.id) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
               >
                 <div
-                  className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-light tracking-wider"
+                  className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 text-xs font-light tracking-wider"
                   style={{
                     background: p.status === "active" ? "rgba(0,200,140,0.12)" : "rgba(255,255,255,0.05)",
                     border: `1px solid ${p.status === "active" ? "rgba(0,200,140,0.3)" : "rgba(255,255,255,0.1)"}`,
@@ -480,7 +447,7 @@ export default function Dashboard() {
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-light tracking-wide text-white truncate">{p.name}</span>
                     {p.status === "active" && (
-                      <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: "rgba(0,200,140,0.6)" }} />
+                      <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: "rgba(0,200,140,0.6)" }} />
                     )}
                   </div>
                   <div className="text-[9px] tracking-widest uppercase mt-0.5" style={{ color: "rgba(255,255,255,0.2)" }}>
@@ -490,7 +457,7 @@ export default function Dashboard() {
                     )}
                   </div>
                 </div>
-                <span className="text-[9px] opacity-20 flex-shrink-0">
+                <span className="text-[9px] opacity-20 shrink-0">
                   {selected?.id === p.id ? "▲" : "▶"}
                 </span>
               </button>
@@ -513,7 +480,6 @@ export default function Dashboard() {
               </div>
 
               <div className="flex-1 flex flex-col px-6 py-6 gap-6">
-                {/* Avatar */}
                 <div className="flex items-center gap-4">
                   <div
                     className="w-16 h-16 rounded-full flex items-center justify-center text-xl font-light tracking-widest"
@@ -526,7 +492,7 @@ export default function Dashboard() {
                     {selected.initials}
                   </div>
                   <div>
-                    <h2 className="text-white font-light tracking-[0.1em] text-lg">{selected.name}</h2>
+                    <h2 className="text-white font-light tracking-widest text-lg">{selected.name}</h2>
                     <div className="flex items-center gap-1.5 mt-1">
                       <div className="w-1.5 h-1.5 rounded-full" style={{ background: selected.status === "active" ? "rgba(0,200,140,0.7)" : "rgba(255,255,255,0.2)" }} />
                       <span className="text-[9px] tracking-[0.2em] uppercase" style={{ color: selected.status === "active" ? "rgba(0,200,140,0.6)" : "rgba(255,255,255,0.2)" }}>
@@ -541,7 +507,6 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                {/* Details */}
                 <div className="grid grid-cols-1 gap-0 border" style={{ borderColor: "rgba(0,200,140,0.08)" }}>
                   {[
                     { label: "Phone",         value: selected.phone },
@@ -551,13 +516,12 @@ export default function Dashboard() {
                     { label: "Last Access",   value: timeAgo(selected.lastSeen) },
                   ].map((row, i) => (
                     <div key={i} className="flex items-center gap-4 px-4 py-3 border-b last:border-b-0" style={{ borderColor: "rgba(0,200,140,0.06)" }}>
-                      <span className="text-[9px] tracking-[0.2em] uppercase w-28 flex-shrink-0" style={{ color: "rgba(255,255,255,0.25)" }}>{row.label}</span>
+                      <span className="text-[9px] tracking-[0.2em] uppercase w-28 shrink-0" style={{ color: "rgba(255,255,255,0.25)" }}>{row.label}</span>
                       <span className="text-sm font-light" style={{ color: "rgba(255,255,255,0.75)" }}>{row.value}</span>
                     </div>
                   ))}
                 </div>
 
-                {/* Actions */}
                 <div className="flex gap-3 mt-auto">
                   <button
                     onClick={() => toggleStatus(selected)}
@@ -581,7 +545,6 @@ export default function Dashboard() {
               </div>
             </div>
           ) : (
-            /* Logs panel */
             <div className="flex flex-col h-full">
               <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: "rgba(0,200,140,0.06)" }}>
                 <span className="text-[10px] tracking-[0.25em] uppercase" style={{ color: "rgba(0,200,140,0.5)" }}>Recent Access Logs</span>
@@ -607,7 +570,7 @@ export default function Dashboard() {
                       className="flex items-center gap-4 px-6 py-3.5 border-b"
                       style={{ borderColor: "rgba(0,200,140,0.04)", background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.01)" }}
                     >
-                      <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: statusColor }} />
+                      <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: statusColor }} />
                       <div className="flex-1 min-w-0">
                         <span className="text-xs font-light" style={{ color: "rgba(255,255,255,0.6)" }}>
                           {METHOD_LABEL[log.method] ?? log.method}
@@ -616,11 +579,11 @@ export default function Dashboard() {
                           {log.location ?? "Front Door"} · {timeAgo(log.timestamp)}
                         </div>
                       </div>
-                      <span className="text-[9px] font-light hidden sm:block flex-shrink-0" style={{ color: "rgba(255,255,255,0.2)" }}>
+                      <span className="text-[9px] font-light hidden sm:block shrink-0" style={{ color: "rgba(255,255,255,0.2)" }}>
                         {fmt(log.timestamp)}
                       </span>
                       <span
-                        className="text-[8px] tracking-[0.15em] uppercase px-2 py-1 flex-shrink-0"
+                        className="text-[8px] tracking-[0.15em] uppercase px-2 py-1 shrink-0"
                         style={{ background: statusBg, color: statusColor, border: `1px solid ${statusColor}` }}
                       >
                         {log.status}
