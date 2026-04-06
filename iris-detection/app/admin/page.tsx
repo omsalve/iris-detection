@@ -110,8 +110,8 @@ export default function AdminDashboard() {
       try {
         setError(null);
         const [logsRes, usersRes] = await Promise.all([
-          fetch(`${API}/admin/logs`).then((r) => r.json()),
-          fetch(`${API}/admin/enrolled-users`).then((r) => r.json()),
+          fetch(`${API}/admin/logs/`).then((r) => r.json()),
+          fetch(`${API}/admin/enrolled-users/`).then((r) => r.json()),
         ]);
 
         if (logsRes.logs) {

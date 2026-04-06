@@ -15,11 +15,11 @@ class IrisScanResponse(BaseModel):
 
 
 class OTPRequest(BaseModel):
-    phone: str
+    email: str
 
 
 class OTPVerifyRequest(BaseModel):
-    phone: str
+    email: str
     otp: str
 
 

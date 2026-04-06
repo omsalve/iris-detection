@@ -17,6 +17,7 @@ router = APIRouter()
 async def enroll_face(request: dict):
     try:
         name = request.get("name")
+        email = request.get("email", "")
         image_base64 = request.get("image_base64")
 
         if not name or not image_base64:
@@ -54,7 +55,7 @@ async def enroll_face(request: dict):
         # 4. Save to database
         # -------------------------------
         person_id = str(uuid.uuid4())
-        save_face_encoding(person_id, name, encodings[0].tolist())
+        save_face_encoding(person_id, name, encodings[0].tolist(), email)
 
         return {
             "success": True,

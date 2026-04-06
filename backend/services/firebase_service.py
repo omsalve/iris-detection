@@ -55,11 +55,12 @@ def get_all_face_encodings():
     docs = db.collection("registered_faces").stream()
     return [{"id": doc.id, **doc.to_dict()} for doc in docs]
 
-def save_face_encoding(person_id: str, name: str, encoding: list):
+def save_face_encoding(person_id: str, name: str, encoding: list, email: str = ""):
     try:
         db = get_db()
         db.collection("registered_faces").document(person_id).set({
             "name": name,
+            "email": email,
             "encoding": encoding,
             "enrolled_at": datetime.now(timezone.utc).isoformat()
         })

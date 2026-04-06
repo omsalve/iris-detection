@@ -7,16 +7,16 @@ router = APIRouter()
 
 @router.post("/send", response_model=OTPResponse)
 async def send_otp(request: OTPRequest):
-    generate_otp(request.phone)
+    generate_otp(request.email)
     return OTPResponse(success=True, message="OTP sent")
 
 @router.post("/verify", response_model=OTPResponse)
 async def verify_otp_route(request: OTPVerifyRequest):
-    valid = verify_otp(request.phone, request.otp)
+    valid = verify_otp(request.email, request.otp)
     log_access(
         method="otp",
         status="granted" if valid else "denied",
-        details=f"phone={request.phone}"
+        details=f"email={request.email}"
     )
     return OTPResponse(
         success=valid,

@@ -8,7 +8,7 @@ const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 type Person = {
   id: string;
   name: string;
-  phone: string;
+  email: string;
   irisDate: string;
   lastSeen: string;
   location: string;
@@ -52,7 +52,7 @@ function EnrollModal({ onClose, onSuccess }: {
   onSuccess: (person: Person) => void;
 }) {
   const [name, setName]                   = useState("");
-  const [phone, setPhone]                 = useState("");
+  const [email, setEmail]                 = useState("");
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [enrolling, setEnrolling]         = useState(false);
   const [error, setError]                 = useState("");
@@ -110,7 +110,7 @@ function EnrollModal({ onClose, onSuccess }: {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ name: name.trim(), image_base64: base64 }),
+        body: JSON.stringify({ name: name.trim(), email: email.trim(), image_base64: base64 }),
       });
 
       const data = await res.json();
@@ -121,7 +121,7 @@ function EnrollModal({ onClose, onSuccess }: {
           id: data.person_id ?? Date.now().toString(),
           firestoreId: data.person_id,
           name: name.trim(),
-          phone: phone.trim() || "—",
+          email: email.trim() || "—",
           irisDate: new Date().toISOString().split("T")[0],
           lastSeen: new Date().toISOString(),
           location: "Front Door",
@@ -236,10 +236,10 @@ function EnrollModal({ onClose, onSuccess }: {
             onBlur={(e)  => (e.target.style.borderColor = "rgba(0,200,140,0.2)")}
           />
           <input
-            type="tel"
-            placeholder="Phone (optional)"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
+            type="email"
+            placeholder="Email address (optional)"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             className="bg-transparent px-4 py-3 text-sm text-white outline-none transition-all"
             style={{ border: "1px solid rgba(0,200,140,0.2)", fontFamily: "monospace" }}
             onFocus={(e) => (e.target.style.borderColor = "rgba(0,200,140,0.6)")}
@@ -299,7 +299,7 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    fetch(`${API}/admin/logs`)
+    fetch(`${API}/admin/logs/`)
       .then((r) => r.json())
       .then((d) => { if (d.logs?.length) setLogs(d.logs); })
       .catch(() => {});
@@ -336,7 +336,7 @@ export default function Dashboard() {
   };
 
   const refreshLogs = () => {
-    fetch(`${API}/admin/logs`)
+    fetch(`${API}/admin/logs/`)
       .then((r) => r.json())
       .then((d) => { if (d.logs?.length) setLogs(d.logs); })
       .catch(() => {});
@@ -509,7 +509,7 @@ export default function Dashboard() {
 
                 <div className="grid grid-cols-1 gap-0 border" style={{ borderColor: "rgba(0,200,140,0.08)" }}>
                   {[
-                    { label: "Phone",         value: selected.phone },
+                    { label: "Email",         value: selected.email },
                     { label: "Face Enrolled", value: new Date(selected.irisDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) },
                     { label: "Last Seen",     value: fmt(selected.lastSeen) },
                     { label: "Location",      value: selected.location },

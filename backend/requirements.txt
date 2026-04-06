@@ -3,6 +3,6 @@ uvicorn
 opencv-python-headless
 numpy
 firebase-admin
-twilio
+brevo-python
 python-dotenv
 python-multipart

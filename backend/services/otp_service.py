@@ -7,7 +7,7 @@ load_dotenv()
 # In-memory OTP store (use Redis in prod)
 otp_store: dict[str, str] = {}
 
-USE_BREVO = False  # Set True when you have Brevo API key
+USE_BREVO = True  # Brevo email OTP enabled
 
 def generate_otp(email: str) -> str:
     otp = str(random.randint(100000, 999999))
