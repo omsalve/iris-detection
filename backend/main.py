@@ -1,8 +1,14 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers import iris, otp, admin, enroll
+from starlette.middleware.proxy_headers import ProxyHeadersMiddleware
+from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
+
 
 app = FastAPI(title="IrisGuard API")
+
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
+app.add_middleware(HTTPSRedirectMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
