@@ -57,23 +57,56 @@ function EnrollModal({ onClose, onSuccess }: {
   const [enrolling, setEnrolling]         = useState(false);
   const [error, setError]                 = useState("");
   const [dragging, setDragging]           = useState(false);
+  const [mode, setMode]                   = useState<"upload" | "selfie">("upload");
+  const [cameraActive, setCameraActive]   = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoRef     = useRef<HTMLVideoElement>(null);
+  const streamRef    = useRef<MediaStream | null>(null);
+
+  // Start camera when selfie mode is active
+  useEffect(() => {
+    if (mode === "selfie" && cameraActive) {
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } } })
+        .then((stream) => {
+          streamRef.current = stream;
+          if (videoRef.current) videoRef.current.srcObject = stream;
+        })
+        .catch(() => setError("Camera access denied or unavailable."));
+    }
+    return () => {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    };
+  }, [mode, cameraActive]);
+
+  const handleModeSwitch = (m: "upload" | "selfie") => {
+    setCapturedImage(null);
+    setError("");
+    setCameraActive(false);
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    setMode(m);
+  };
+
+  const takeSelfie = () => {
+    if (!videoRef.current) return;
+    const canvas = document.createElement("canvas");
+    canvas.width  = videoRef.current.videoWidth;
+    canvas.height = videoRef.current.videoHeight;
+    canvas.getContext("2d")?.drawImage(videoRef.current, 0, 0);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+    setCapturedImage(dataUrl);
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    setCameraActive(false);
+  };
 
   const processFile = (file: File) => {
-    if (!file.type.startsWith("image/")) {
-      setError("Please upload an image file.");
-      return;
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      setError("Image must be under 10MB.");
-      return;
-    }
+    if (!file.type.startsWith("image/")) { setError("Please upload an image file."); return; }
+    if (file.size > 10 * 1024 * 1024)   { setError("Image must be under 10MB."); return; }
     const reader = new FileReader();
-    reader.onload = (e) => {
-      setCapturedImage(e.target?.result as string);
-      setError("");
-    };
+    reader.onload = (e) => { setCapturedImage(e.target?.result as string); setError(""); };
     reader.readAsDataURL(file);
   };
 
@@ -83,60 +116,38 @@ function EnrollModal({ onClose, onSuccess }: {
   };
 
   const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragging(false);
+    e.preventDefault(); setDragging(false);
     const file = e.dataTransfer.files?.[0];
     if (file) processFile(file);
   };
 
   const handleSubmit = async () => {
     if (!name.trim())   { setError("Enter a name."); return; }
-    if (!capturedImage) { setError("Upload a photo first."); return; }
-
-    setEnrolling(true);
-    setError("");
-
+    if (!capturedImage) { setError("Capture or upload a photo first."); return; }
+    setEnrolling(true); setError("");
     try {
-      const auth  = getAuth();
-      const token = await auth.currentUser?.getIdToken();
-
-      const base64 = capturedImage.includes(",")
-        ? capturedImage.split(",")[1]
-        : capturedImage;
-
-      const res = await fetch(`${API}/enroll`, {
+      const { getAuth } = await import("firebase/auth");
+      const token = await getAuth().currentUser?.getIdToken();
+      const base64 = capturedImage.includes(",") ? capturedImage.split(",")[1] : capturedImage;
+      const res  = await fetch(`${API}/enroll`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ name: name.trim(), image_base64: base64 }),
       });
-
       const data = await res.json();
-
       if (data.success) {
         const initials = name.trim().split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
-        onSuccess({
-          id: data.person_id ?? Date.now().toString(),
-          firestoreId: data.person_id,
-          name: name.trim(),
-          phone: phone.trim() || "—",
-          irisDate: new Date().toISOString().split("T")[0],
-          lastSeen: new Date().toISOString(),
-          location: "Front Door",
-          initials,
-          status: "active",
-        });
+        onSuccess({ id: data.person_id ?? Date.now().toString(), firestoreId: data.person_id, name: name.trim(), phone: phone.trim() || "—", irisDate: new Date().toISOString().split("T")[0], lastSeen: new Date().toISOString(), location: "Front Door", initials, status: "active" });
       } else {
         setError(data.message ?? "Enrollment failed.");
       }
-    } catch {
-      setError("Backend unreachable.");
-    } finally {
-      setEnrolling(false);
-    }
+    } catch { setError("Backend unreachable."); }
+    finally  { setEnrolling(false); }
   };
+
+  const borderGreen = "rgba(0,200,140,0.2)";
+  const textGreen   = "rgba(0,200,140,0.9)";
+  const textDim     = "rgba(255,255,255,0.3)";
 
   return (
     <div
@@ -144,80 +155,99 @@ function EnrollModal({ onClose, onSuccess }: {
       style={{ background: "rgba(3,10,7,0.95)" }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div
-        className="w-full max-w-sm border flex flex-col gap-0 overflow-hidden"
-        style={{ background: "#030a07", borderColor: "rgba(0,200,140,0.2)" }}
-      >
+      <div className="w-full max-w-sm border flex flex-col gap-0 overflow-hidden" style={{ background: "#030a07", borderColor: borderGreen }}>
+
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: "rgba(0,200,140,0.1)" }}>
-          <span className="text-[10px] tracking-[0.25em] uppercase" style={{ color: "rgba(0,200,140,0.6)" }}>
-            Enroll New Person
-          </span>
-          <button onClick={onClose} className="text-[10px] uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.2)" }}>✕</button>
+          <span className="text-[10px] tracking-[0.25em] uppercase" style={{ color: "rgba(0,200,140,0.6)" }}>Enroll New Person</span>
+          <button onClick={onClose} className="text-[10px] uppercase tracking-widest" style={{ color: textDim }}>✕</button>
         </div>
 
-        {/* Upload Area */}
+        {/* Mode toggle */}
+        <div className="flex border-b" style={{ borderColor: "rgba(0,200,140,0.1)" }}>
+          {(["upload", "selfie"] as const).map((m) => (
+            <button
+              key={m}
+              onClick={() => handleModeSwitch(m)}
+              className="flex-1 py-3 text-[9px] tracking-[0.2em] uppercase transition-all"
+              style={{
+                color:      mode === m ? textGreen : textDim,
+                background: mode === m ? "rgba(0,200,140,0.07)" : "transparent",
+                borderBottom: mode === m ? `2px solid ${textGreen}` : "2px solid transparent",
+              }}
+            >
+              {m === "upload" ? "📁 File Upload" : "📸 Selfie"}
+            </button>
+          ))}
+        </div>
+
+        {/* Image capture area */}
         <div className="px-6 pt-6 pb-4">
-          {!capturedImage ? (
+          {capturedImage ? (
+            <div className="relative w-full overflow-hidden" style={{ borderRadius: "2px", border: `1px solid ${borderGreen}` }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={capturedImage} alt="Preview" className="w-full object-cover" style={{ maxHeight: "200px", filter: "hue-rotate(100deg) saturate(0.4) brightness(0.9)", objectFit: "cover" }} />
+              <div className="absolute top-2 left-2 px-2 py-1 text-[8px] tracking-widest uppercase" style={{ background: "rgba(0,200,140,0.15)", color: textGreen, border: `1px solid rgba(0,200,140,0.3)` }}>✓ Photo ready</div>
+              <button
+                onClick={() => { setCapturedImage(null); setError(""); if (mode === "selfie") setCameraActive(true); }}
+                className="absolute top-2 right-2 px-2 py-1 text-[8px] tracking-widest uppercase"
+                style={{ background: "rgba(3,10,7,0.8)", color: textDim, border: "1px solid rgba(255,255,255,0.1)" }}
+              >
+                ✕ Retake
+              </button>
+            </div>
+
+          ) : mode === "upload" ? (
             <div
               onClick={() => fileInputRef.current?.click()}
               onDrop={handleDrop}
               onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
               onDragLeave={() => setDragging(false)}
               className="relative w-full flex flex-col items-center justify-center cursor-pointer transition-all"
-              style={{
-                border: `2px dashed ${dragging ? "rgba(0,200,140,0.7)" : "rgba(0,200,140,0.25)"}`,
-                background: dragging ? "rgba(0,200,140,0.05)" : "rgba(0,200,140,0.02)",
-                borderRadius: "2px",
-                minHeight: "180px",
-                gap: "10px",
-              }}
+              style={{ border: `2px dashed ${dragging ? "rgba(0,200,140,0.7)" : borderGreen}`, background: dragging ? "rgba(0,200,140,0.05)" : "rgba(0,200,140,0.02)", borderRadius: "2px", minHeight: "160px", gap: "10px" }}
             >
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"
-                  stroke="rgba(0,200,140,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                <polyline points="17 8 12 3 7 8"
-                  stroke="rgba(0,200,140,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                <line x1="12" y1="3" x2="12" y2="15"
-                  stroke="rgba(0,200,140,0.5)" strokeWidth="1.5" strokeLinecap="round" />
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="rgba(0,200,140,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                <polyline points="17 8 12 3 7 8" stroke="rgba(0,200,140,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                <line x1="12" y1="3" x2="12" y2="15" stroke="rgba(0,200,140,0.5)" strokeWidth="1.5" strokeLinecap="round" />
               </svg>
               <div className="text-center flex flex-col gap-1">
-                <span className="text-[11px] tracking-widest uppercase" style={{ color: "rgba(0,200,140,0.7)" }}>
-                  Click or drop photo here
-                </span>
-                <span className="text-[9px] tracking-widest uppercase" style={{ color: "rgba(255,255,255,0.15)" }}>
-                  JPG · PNG · WEBP — max 10MB
-                </span>
+                <span className="text-[11px] tracking-widest uppercase" style={{ color: "rgba(0,200,140,0.7)" }}>Click or drop photo here</span>
+                <span className="text-[9px] tracking-widest uppercase" style={{ color: textDim }}>JPG · PNG · WEBP — max 10MB</span>
               </div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleFileChange}
-                className="hidden"
-              />
+              <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
             </div>
-          ) : (
-            <div className="relative w-full overflow-hidden" style={{ borderRadius: "2px", border: "1px solid rgba(0,200,140,0.2)" }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={capturedImage}
-                alt="Preview"
-                className="w-full object-cover"
-                style={{ maxHeight: "200px", filter: "hue-rotate(100deg) saturate(0.4) brightness(0.9)", objectFit: "cover" }}
-              />
-              <div
-                className="absolute top-2 left-2 px-2 py-1 text-[8px] tracking-widest uppercase"
-                style={{ background: "rgba(0,200,140,0.15)", color: "rgba(0,200,140,0.9)", border: "1px solid rgba(0,200,140,0.3)" }}
+
+          ) : !cameraActive ? (
+            <div
+              className="w-full flex flex-col items-center justify-center gap-3 cursor-pointer transition-all"
+              style={{ border: `2px dashed ${borderGreen}`, background: "rgba(0,200,140,0.02)", borderRadius: "2px", minHeight: "160px" }}
+            >
+              <span style={{ fontSize: "2rem" }}>📸</span>
+              <button
+                onClick={() => setCameraActive(true)}
+                className="px-5 py-2 text-[9px] tracking-[0.2em] uppercase border transition-all"
+                style={{ borderColor: "rgba(0,200,140,0.4)", color: textGreen }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(0,200,140,0.08)"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
               >
-                ✓ Photo ready
+                Open Camera
+              </button>
+            </div>
+
+          ) : (
+            <div className="relative w-full overflow-hidden" style={{ borderRadius: "2px", border: `1px solid ${borderGreen}` }}>
+              <video ref={videoRef} autoPlay playsInline muted className="w-full object-cover" style={{ maxHeight: "200px", filter: "brightness(0.9)" }} />
+              {/* scanning reticle */}
+              <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+                <div className="w-24 h-24 rounded-full" style={{ border: "1.5px solid rgba(0,200,140,0.5)", boxShadow: "0 0 12px rgba(0,200,140,0.2)" }} />
               </div>
               <button
-                onClick={() => { setCapturedImage(null); setError(""); }}
-                className="absolute top-2 right-2 px-2 py-1 text-[8px] tracking-widest uppercase"
-                style={{ background: "rgba(3,10,7,0.8)", color: "rgba(255,255,255,0.4)", border: "1px solid rgba(255,255,255,0.1)" }}
+                onClick={takeSelfie}
+                className="absolute bottom-3 left-1/2 -translate-x-1/2 px-5 py-2 text-[9px] tracking-[0.2em] uppercase border transition-all"
+                style={{ borderColor: "rgba(0,200,140,0.6)", color: textGreen, background: "rgba(3,10,7,0.8)" }}
               >
-                ✕ Remove
+                Capture
               </button>
             </div>
           )}
@@ -225,46 +255,31 @@ function EnrollModal({ onClose, onSuccess }: {
 
         {/* Form fields */}
         <div className="px-6 pb-4 flex flex-col gap-3">
-          <input
-            type="text"
-            placeholder="Full name *"
-            value={name}
-            onChange={(e) => { setName(e.target.value); setError(""); }}
-            className="bg-transparent px-4 py-3 text-sm text-white outline-none transition-all"
-            style={{ border: "1px solid rgba(0,200,140,0.2)", fontFamily: "monospace" }}
-            onFocus={(e) => (e.target.style.borderColor = "rgba(0,200,140,0.6)")}
-            onBlur={(e)  => (e.target.style.borderColor = "rgba(0,200,140,0.2)")}
-          />
-          <input
-            type="tel"
-            placeholder="Phone (optional)"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            className="bg-transparent px-4 py-3 text-sm text-white outline-none transition-all"
-            style={{ border: "1px solid rgba(0,200,140,0.2)", fontFamily: "monospace" }}
-            onFocus={(e) => (e.target.style.borderColor = "rgba(0,200,140,0.6)")}
-            onBlur={(e)  => (e.target.style.borderColor = "rgba(0,200,140,0.2)")}
-          />
+          {(["text", "tel"] as const).map((type, i) => (
+            <input
+              key={type}
+              type={type}
+              placeholder={i === 0 ? "Full name *" : "Phone (optional)"}
+              value={i === 0 ? name : phone}
+              onChange={(e) => i === 0 ? setName(e.target.value) : setPhone(e.target.value)}
+              className="bg-transparent px-4 py-3 text-sm text-white outline-none transition-all"
+              style={{ border: `1px solid ${borderGreen}`, fontFamily: "monospace" }}
+              onFocus={(e) => (e.target.style.borderColor = "rgba(0,200,140,0.6)")}
+              onBlur={(e)  => (e.target.style.borderColor = borderGreen)}
+            />
+          ))}
 
-          {error && (
-            <p className="text-[9px] tracking-widest uppercase" style={{ color: "rgba(255,80,80,0.8)" }}>
-              ✕ {error}
-            </p>
-          )}
+          {error && <p className="text-[9px] tracking-widest uppercase" style={{ color: "rgba(255,80,80,0.8)" }}>✕ {error}</p>}
 
           <div className="flex gap-3 pt-1">
-            <button
-              onClick={onClose}
-              className="flex-1 py-2.5 text-[9px] tracking-[0.15em] uppercase border"
-              style={{ borderColor: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.3)" }}
-            >
+            <button onClick={onClose} className="flex-1 py-2.5 text-[9px] tracking-[0.15em] uppercase border" style={{ borderColor: "rgba(255,255,255,0.1)", color: textDim }}>
               Cancel
             </button>
             <button
               onClick={handleSubmit}
               disabled={enrolling || !capturedImage || !name.trim()}
               className="flex-1 py-2.5 text-[9px] tracking-[0.15em] uppercase border transition-all disabled:opacity-30"
-              style={{ borderColor: "rgba(0,200,140,0.4)", color: "rgba(0,200,140,0.9)" }}
+              style={{ borderColor: "rgba(0,200,140,0.4)", color: textGreen }}
               onMouseEnter={(e) => { if (!enrolling) (e.currentTarget as HTMLElement).style.background = "rgba(0,200,140,0.08)"; }}
               onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
             >
@@ -272,6 +287,7 @@ function EnrollModal({ onClose, onSuccess }: {
             </button>
           </div>
         </div>
+
       </div>
     </div>
   );
@@ -302,6 +318,29 @@ export default function Dashboard() {
     fetch(`${API}/admin/logs`)
       .then((r) => r.json())
       .then((d) => { if (d.logs?.length) setLogs(d.logs); })
+      .catch(() => {});
+
+    fetch(`${API}/admin/enrolled-users`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.users?.length) {
+          const people = d.users.map((user: any) => {
+            const initials = user.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
+            return {
+              id: user.id,
+              firestoreId: user.firestoreId,
+              name: user.name,
+              phone: "—",
+              irisDate: user.enrolled_at.split("T")[0],
+              lastSeen: user.enrolled_at,
+              location: "Front Door",
+              initials,
+              status: "active" as const,
+            };
+          });
+          setPeople(people);
+        }
+      })
       .catch(() => {});
   }, []);
 
