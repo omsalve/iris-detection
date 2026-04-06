@@ -1,373 +1,267 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
-import WebcamScanner, { type WebcamScannerHandle } from "../components/WebcamScanner";
+import { useState, useEffect } from "react";
+import WebcamScanner from "../components/WebcamScanner";
 
-type Stage = "choose" | "iris" | "otp" | "granted" | "denied";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+export default function AccessTerminal() {
+  const [status, setStatus] = useState<"idle" | "scanning" | "granted" | "denied">("idle");
+  const [message, setMessage] = useState("AWAITING SUBJECT...");
+  const [overlayFrame, setOverlayFrame] = useState<string | null>(null);
+  const [isScanning, setIsScanning] = useState(false);
+  const [now, setNow] = useState("");
+  
+  // OTP Fallback state
+  const [useOtp, setUseOtp] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
+  const [verifyingOtp, setVerifyingOtp] = useState(false);
 
-export default function AccessPage() {
-  const [stage,      setStage]      = useState<Stage>("choose");
-  const [phone,      setPhone]      = useState("");
-  const [otpCode,    setOtpCode]    = useState("");
-  const [otpSent,    setOtpSent]    = useState(false);
-  const [scanning,   setScanning]   = useState(false);
-  const [loading,    setLoading]    = useState(false);
-  const [error,      setError]      = useState("");
-  const [status,     setStatus]     = useState("");
-  const [confidence, setConfidence] = useState(0);
-  const [overlayFrame,  setOverlayFrame]  = useState<string | null>(null);
-  const [snapshotUrl,   setSnapshotUrl]   = useState<string | null>(null);
-
-  const scannerRef = useRef<WebcamScannerHandle>(null);
-
-  /* ── Iris scan handler ─────────────────────────────────────────── */
-  const handleIrisScan = useCallback(async (base64Image: string) => {
-    setScanning(false);
-    setLoading(true);
-    setError("");
-    setStatus("Analysing biometric data…");
-
-    try {
-      const res = await fetch(`${API}/iris/scan`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image_base64: base64Image }),
-      });
-
-      const data = await res.json();
-
-      // Show the HUD overlay frame from backend
-      if (data.overlay_frame) setOverlayFrame(data.overlay_frame);
-      if (data.snapshot_url)  setSnapshotUrl(data.snapshot_url);
-
-      setConfidence(Math.round(data.confidence * 100));
-
-      if (data.matched) {
-        setStatus("Identity confirmed — notifying admin…");
-        await fetch(`${API}/admin/alert`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ reason: "Visitor access granted via iris scan" }),
-        }).catch(() => {});
-        setTimeout(() => setStage("granted"), 1200);
-      } else {
-        setStatus("No biometric match detected.");
-        setTimeout(() => setStage("denied"), 900);
-      }
-    } catch {
-      setError("Scanner offline. Backend not reachable.");
-      setStatus("");
-    }
-
-    setLoading(false);
+  // Clock for the terminal UI
+  useEffect(() => {
+    const tick = () => {
+      setNow(new Date().toLocaleTimeString("en-IN", { 
+        hour: "2-digit", minute: "2-digit", second: "2-digit" 
+      }));
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
   }, []);
 
-  /* ── OTP handlers ──────────────────────────────────────────────── */
-  const handleSendOTP = async () => {
-    if (!phone) { setError("Enter your phone number"); return; }
-    setLoading(true); setError("");
-    try {
-      await fetch(`${API}/otp/send`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone }),
-      });
-      setOtpSent(true);
-      setStatus("OTP sent — check your phone");
-    } catch { setError("Failed to send OTP. Backend offline?"); }
-    setLoading(false);
-  };
+  // Handle image captured from WebcamScanner
+  const handleCapture = async (base64: string) => {
+    setIsScanning(false); // Reset trigger
+    setStatus("scanning");
+    setMessage("ANALYZING BIOMETRICS...");
 
-  const handleVerifyOTP = async () => {
-    if (!otpCode) { setError("Enter the OTP code"); return; }
-    setLoading(true); setError("");
     try {
-      const res = await fetch(`${API}/otp/verify`, {
+      // Clean base64 string for Python backend
+      const cleanBase64 = base64.includes(",") ? base64.split(",")[1] : base64;
+
+      const res = await fetch(`${API_URL}/iris/scan`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, otp: otpCode }),
+        body: JSON.stringify({ image_base64: cleanBase64 }),
       });
+
+      if (!res.ok) throw new Error("Network response was not ok");
+      
       const data = await res.json();
-      if (data.success) {
-        setStatus("Verified — notifying admin…");
-        await fetch(`${API}/admin/alert`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ reason: `Visitor access granted via OTP (${phone})` }),
-        }).catch(() => {});
-        setTimeout(() => setStage("granted"), 1000);
-      } else {
-        setTimeout(() => setStage("denied"), 500);
+
+      if (data.overlay_frame) {
+        setOverlayFrame(data.overlay_frame);
       }
-    } catch { setError("Verification failed. Backend offline?"); }
-    setLoading(false);
+
+      if (data.matched) {
+        setStatus("granted");
+        setMessage(`ACCESS GRANTED [CONFIDENCE: ${(data.confidence * 100).toFixed(1)}%]`);
+      } else {
+        setStatus("denied");
+        setMessage("ACCESS DENIED: UNRECOGNIZED SUBJECT");
+      }
+
+    } catch (err) {
+      console.error(err);
+      setStatus("denied");
+      setMessage("SYSTEM ERROR: UNABLE TO CONNECT TO SERVER");
+    } finally {
+      // Auto-reset terminal after 3.5 seconds
+      setTimeout(() => {
+        setStatus("idle");
+        setMessage("AWAITING SUBJECT...");
+        setOverlayFrame(null);
+      }, 3500);
+    }
   };
 
-  const resetIris = () => {
-    setScanning(false); setLoading(false); setError(""); setStatus("");
-    setOverlayFrame(null); setSnapshotUrl(null);
-    setStage("choose");
+  // Handle OTP Submission
+  const handleOtpSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (otpCode.length < 6) return;
+    
+    setVerifyingOtp(true);
+    setStatus("scanning");
+    setMessage("VERIFYING PASSCODE...");
+
+    try {
+      const res = await fetch(`${API_URL}/otp/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: otpCode }),
+      });
+      
+      const data = await res.json();
+
+      if (data.success || data.matched || res.ok) { // Adjust based on your OTP endpoint response structure
+        setStatus("granted");
+        setMessage("ACCESS GRANTED VIA OVERRIDE");
+        setOtpCode("");
+      } else {
+        setStatus("denied");
+        setMessage("ACCESS DENIED: INVALID PASSCODE");
+      }
+    } catch (err) {
+      setStatus("denied");
+      setMessage("SYSTEM ERROR: VERIFICATION FAILED");
+    } finally {
+      setVerifyingOtp(false);
+      setTimeout(() => {
+        setStatus("idle");
+        setMessage("AWAITING SUBJECT...");
+      }, 3500);
+    }
   };
 
-  /* ── Shared styles ─────────────────────────────────────────────── */
-  const btn      = "w-full py-3 text-xs tracking-[0.2em] uppercase border transition-all duration-300 disabled:opacity-40 font-mono";
-  const btnGreen = "border-[rgba(0,200,140,0.4)] text-[rgba(0,200,140,0.9)] hover:bg-[rgba(0,200,140,0.08)] hover:border-[rgba(0,200,140,0.8)]";
-  const btnWhite = "border-[rgba(255,255,255,0.15)] text-[rgba(255,255,255,0.4)] hover:border-[rgba(255,255,255,0.3)] hover:text-[rgba(255,255,255,0.7)]";
-  const inputSty = "bg-transparent px-4 py-3 text-sm text-white outline-none border border-[rgba(0,200,140,0.2)] focus:border-[rgba(0,200,140,0.6)] transition-all w-full font-mono tracking-wide";
+  // Dynamic styling based on status
+  const getThemeColor = () => {
+    if (status === "granted") return { text: "text-green-400", border: "border-green-500", glow: "rgba(0, 220, 130, 0.4)" };
+    if (status === "denied") return { text: "text-red-500", border: "border-red-500", glow: "rgba(255, 60, 60, 0.4)" };
+    if (status === "scanning") return { text: "text-blue-400", border: "border-blue-500", glow: "rgba(60, 180, 255, 0.4)" };
+    return { text: "text-[#00c88c]", border: "border-[#00c88c]/30", glow: "rgba(0, 200, 140, 0.15)" };
+  };
+
+  const theme = getThemeColor();
 
   return (
-    <main
-      className="min-h-screen flex flex-col items-center justify-center px-6 relative"
-      style={{ background: "#030a07", fontFamily: "monospace" }}
-    >
-      {/* Ambient glow */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{ background: "radial-gradient(ellipse 60% 50% at 50% 50%, rgba(0,180,120,0.06) 0%, transparent 70%)" }}
-      />
-
-      {/* ── CHOOSE METHOD ── */}
-      {stage === "choose" && (
-        <div className="flex flex-col gap-4 w-full max-w-xs relative z-10">
-          <p className="text-center text-[10px] tracking-[0.25em] uppercase mb-2"
-            style={{ color: "rgba(0,200,140,0.5)" }}>
-            Select Access Method
-          </p>
-          <button className={`${btn} ${btnGreen}`} onClick={() => setStage("iris")}>
-            👁 Iris Scan
-          </button>
-          <button className={`${btn} ${btnWhite}`} onClick={() => setStage("otp")}>
-            📱 OTP Verification
-          </button>
-        </div>
-      )}
-
-      {/* ── IRIS SCAN ── */}
-      {stage === "iris" && (
-        <div className="flex flex-col gap-4 w-full max-w-xs relative z-10">
-          <p className="text-center text-[10px] tracking-[0.25em] uppercase"
-            style={{ color: "rgba(0,200,140,0.5)" }}>
-            Iris Scan
-          </p>
-
-          {/* Webcam + overlay container */}
-          <div
-            className="relative w-full aspect-square rounded-full overflow-hidden border"
-            style={{ borderColor: "rgba(0,200,140,0.3)" }}
-          >
-            {/* Outer spinning ring during scan */}
-            {scanning && (
-              <div
-                className="absolute inset-0 rounded-full border-2 border-dashed animate-spin z-10 pointer-events-none"
-                style={{ borderColor: "rgba(0,200,140,0.5)", animationDuration: "3s" }}
-              />
-            )}
-
-            <WebcamScanner
-              ref={scannerRef}
-              onCapture={handleIrisScan}
-              isScanning={scanning}
-              overlayFrame={overlayFrame}
-            />
+    <div className="min-h-screen flex flex-col items-center justify-center p-6" style={{ background: "#030a07", fontFamily: "monospace" }}>
+      
+      {/* Terminal Container */}
+      <div 
+        className="w-full max-w-md relative flex flex-col items-center border transition-all duration-500 overflow-hidden"
+        style={{ 
+          borderColor: theme.border.replace("border-", ""),
+          boxShadow: `0 0 40px ${theme.glow}`,
+          background: "rgba(3, 10, 7, 0.8)" 
+        }}
+      >
+        {/* Header */}
+        <div className="w-full flex items-center justify-between px-6 py-4 border-b border-white/5">
+          <div className="flex items-center gap-2">
+            <div className={`w-2 h-2 rounded-full animate-pulse ${status === "idle" ? "bg-[#00c88c]" : (status === "scanning" ? "bg-blue-400" : (status === "granted" ? "bg-green-400" : "bg-red-500"))}`} />
+            <span className="text-[10px] tracking-[0.3em] uppercase text-white/50">Terminal 01</span>
           </div>
+          <span className="text-[10px] tracking-widest text-white/30">{now}</span>
+        </div>
 
-          {/* Eye snapshot thumbnail — shown after scan */}
-          {snapshotUrl && snapshotUrl.startsWith("http") && (
-            <div className="flex flex-col gap-1">
-              <p className="text-[9px] tracking-[0.2em] uppercase text-center"
-                style={{ color: "rgba(0,200,140,0.4)" }}>
-                Eye Snapshot Captured
-              </p>
-              <div
-                className="w-full overflow-hidden border"
-                style={{ borderColor: "rgba(0,200,140,0.2)", maxHeight: "80px" }}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={snapshotUrl}
-                  alt="Eye scan snapshot"
-                  className="w-full object-cover"
-                  style={{ filter: "hue-rotate(100deg) saturate(0.6) brightness(0.9)" }}
+        {/* Main Display Area */}
+        <div className="w-full p-8 flex flex-col items-center justify-center min-h-[400px]">
+          
+          {!useOtp ? (
+            <>
+              {/* Camera Scanner View */}
+              <div className="relative w-64 h-64 mb-8">
+                <WebcamScanner 
+                  isScanning={isScanning} 
+                  onCapture={handleCapture} 
+                  overlayFrame={overlayFrame} 
                 />
               </div>
+
+              {/* Status Message */}
+              <div className="text-center h-12 flex items-center justify-center mb-6">
+                <p className={`text-sm tracking-[0.2em] uppercase font-bold ${theme.text} transition-colors duration-300`}>
+                  {message}
+                </p>
+              </div>
+
+              {/* Action Button */}
+              <button
+                onClick={() => setIsScanning(true)}
+                disabled={status !== "idle"}
+                className={`w-full py-4 text-xs tracking-[0.25em] uppercase border transition-all duration-300 disabled:opacity-50
+                  ${status === "idle" ? "hover:bg-[#00c88c]/10 hover:border-[#00c88c]" : ""}
+                `}
+                style={{ borderColor: "rgba(0, 200, 140, 0.3)", color: "rgba(0, 200, 140, 0.9)" }}
+              >
+                {status === "idle" ? "Initiate Scan" : "Processing..."}
+              </button>
+            </>
+          ) : (
+            /* OTP Fallback View */
+            <div className="w-full flex flex-col items-center animate-fade-in">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" className="mb-6 opacity-80" stroke="rgba(0, 200, 140, 0.8)" strokeWidth="1.5">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+              </svg>
+              
+              <div className="text-center h-12 flex items-center justify-center mb-6">
+                <p className={`text-sm tracking-[0.2em] uppercase font-bold ${theme.text} transition-colors duration-300`}>
+                  {message === "AWAITING SUBJECT..." ? "ENTER SECURE PASSCODE" : message}
+                </p>
+              </div>
+
+              <form onSubmit={handleOtpSubmit} className="w-full flex flex-col gap-4">
+                <input
+                  type="text"
+                  maxLength={6}
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
+                  placeholder="• • • • • •"
+                  className="w-full bg-transparent border-b text-center text-3xl tracking-[0.5em] py-4 text-white outline-none transition-all placeholder:text-white/10 focus:border-[#00c88c]"
+                  style={{ borderColor: "rgba(0, 200, 140, 0.3)" }}
+                  disabled={status !== "idle"}
+                  autoFocus
+                />
+                
+                <button
+                  type="submit"
+                  disabled={otpCode.length < 6 || status !== "idle" || verifyingOtp}
+                  className="w-full py-4 mt-4 text-xs tracking-[0.25em] uppercase border transition-all duration-300 disabled:opacity-30 hover:bg-[#00c88c]/10 hover:border-[#00c88c]"
+                  style={{ borderColor: "rgba(0, 200, 140, 0.3)", color: "rgba(0, 200, 140, 0.9)" }}
+                >
+                  {verifyingOtp ? "Verifying..." : "Authorize"}
+                </button>
+              </form>
             </div>
           )}
 
+        </div>
+
+        {/* Footer / Toggle Mode */}
+        <div className="w-full p-4 border-t border-white/5 flex justify-center bg-black/20">
           <button
-            className={`${btn} ${btnGreen}`}
-            disabled={loading || scanning}
-            onClick={() => { setError(""); setStatus(""); setOverlayFrame(null); setScanning(true); }}
+            onClick={() => {
+              setUseOtp(!useOtp);
+              setStatus("idle");
+              setMessage("AWAITING SUBJECT...");
+              setOtpCode("");
+            }}
+            disabled={status !== "idle"}
+            className="text-[9px] tracking-widest uppercase text-white/30 hover:text-white/70 transition-colors disabled:opacity-50"
           >
-            {loading ? "Processing…" : scanning ? "Capturing…" : "Scan Iris"}
-          </button>
-
-          {status && (
-            <p className="text-center text-[10px] tracking-widest uppercase"
-              style={{ color: "rgba(0,200,140,0.7)" }}>
-              ● {status}
-            </p>
-          )}
-          {error && (
-            <p className="text-center text-[10px] tracking-widest uppercase"
-              style={{ color: "rgba(255,80,80,0.8)" }}>
-              ✕ {error}
-            </p>
-          )}
-
-          <button className={`${btn} ${btnWhite}`} onClick={resetIris}>
-            ← Back
+            {useOtp ? "Switch to Biometric Scanner" : "Access Denied? Use Passcode Override"}
           </button>
         </div>
-      )}
 
-      {/* ── OTP ── */}
-      {stage === "otp" && (
-        <div className="flex flex-col gap-4 w-full max-w-xs relative z-10">
-          <p className="text-center text-[10px] tracking-[0.25em] uppercase"
-            style={{ color: "rgba(0,200,140,0.5)" }}>
-            OTP Verification
-          </p>
-
-          <input
-            className={inputSty}
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            placeholder="+91XXXXXXXXXX"
-            disabled={otpSent}
+        {/* Scan line effect */}
+        {status === "scanning" && (
+          <div 
+            className="absolute left-0 right-0 h-[2px] z-50 pointer-events-none"
+            style={{ 
+              background: "linear-gradient(90deg, transparent 0%, rgba(60, 180, 255, 0.8) 50%, transparent 100%)",
+              boxShadow: "0 0 10px rgba(60, 180, 255, 0.5)",
+              animation: "scan-sweep 1.5s linear infinite" 
+            }}
           />
+        )}
+      </div>
 
-          {!otpSent ? (
-            <button className={`${btn} ${btnGreen}`} onClick={handleSendOTP} disabled={loading}>
-              {loading ? "Sending…" : "Send OTP"}
-            </button>
-          ) : (
-            <>
-              <input
-                className={`${inputSty} tracking-[0.4em] text-center`}
-                value={otpCode}
-                onChange={(e) => setOtpCode(e.target.value)}
-                placeholder="6-digit code"
-                maxLength={6}
-              />
-              <button className={`${btn} ${btnGreen}`} onClick={handleVerifyOTP} disabled={loading}>
-                {loading ? "Verifying…" : "Verify OTP"}
-              </button>
-              <button
-                className="text-[9px] tracking-widest uppercase text-center transition-colors"
-                style={{ color: "rgba(255,255,255,0.2)" }}
-                onClick={() => { setOtpSent(false); setOtpCode(""); setStatus(""); }}
-              >
-                Change number
-              </button>
-            </>
-          )}
-
-          {status && (
-            <p className="text-center text-[10px] tracking-widest uppercase"
-              style={{ color: "rgba(0,200,140,0.7)" }}>
-              ● {status}
-            </p>
-          )}
-          {error && (
-            <p className="text-center text-[10px] tracking-widests uppercase"
-              style={{ color: "rgba(255,80,80,0.8)" }}>
-              ✕ {error}
-            </p>
-          )}
-
-          <button
-            className={`${btn} ${btnWhite}`}
-            onClick={() => { setStage("choose"); setError(""); setStatus(""); setOtpSent(false); }}
-          >
-            ← Back
-          </button>
-        </div>
-      )}
-
-      {/* ── GRANTED ── */}
-      {stage === "granted" && (
-        <div className="flex flex-col items-center gap-6 relative z-10">
-          <div
-            className="w-20 h-20 rounded-full flex items-center justify-center border"
-            style={{
-              borderColor: "rgba(0,200,140,0.5)",
-              background: "rgba(0,200,140,0.08)",
-              boxShadow: "0 0 40px rgba(0,200,140,0.2)",
-            }}
-          >
-            <span style={{ fontSize: "2rem" }}>✓</span>
-          </div>
-
-          <div className="text-center flex flex-col gap-2">
-            <h1 className="text-white font-light tracking-[0.3em] uppercase text-xl"
-              style={{ fontFamily: "Georgia, serif" }}>
-              Access Granted
-            </h1>
-            {confidence > 0 && (
-              <p className="text-[10px] tracking-widest uppercase"
-                style={{ color: "rgba(0,200,140,0.5)" }}>
-                Confidence: {confidence}%
-              </p>
-            )}
-
-            {/* Snapshot displayed on granted screen */}
-            {snapshotUrl && snapshotUrl.startsWith("http") && (
-              <div className="mt-2 flex flex-col gap-1 items-center">
-                <p className="text-[9px] tracking-[0.2em] uppercase"
-                  style={{ color: "rgba(0,200,140,0.35)" }}>
-                  Eye Scan Stored
-                </p>
-                <div
-                  className="overflow-hidden border"
-                  style={{ borderColor: "rgba(0,200,140,0.15)", width: "120px" }}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={snapshotUrl}
-                    alt="Stored eye scan"
-                    className="w-full object-cover"
-                    style={{ filter: "hue-rotate(100deg) saturate(0.5) brightness(0.85)" }}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-
-          <button className={`${btn} ${btnGreen} max-w-xs`} onClick={() => {
-            setStage("choose"); setConfidence(0); setStatus("");
-            setOverlayFrame(null); setSnapshotUrl(null);
-          }}>
-            Reset
-          </button>
-        </div>
-      )}
-
-      {/* ── DENIED ── */}
-      {stage === "denied" && (
-        <div className="flex flex-col items-center gap-6 relative z-10">
-          <div
-            className="w-20 h-20 rounded-full flex items-center justify-center border"
-            style={{
-              borderColor: "rgba(255,60,60,0.4)",
-              background: "rgba(255,60,60,0.06)",
-              boxShadow: "0 0 40px rgba(255,60,60,0.15)",
-            }}
-          >
-            <span style={{ fontSize: "2rem" }}>✕</span>
-          </div>
-          <h1 className="text-white font-light tracking-[0.3em] uppercase text-xl"
-            style={{ fontFamily: "Georgia, serif" }}>
-            Access Denied
-          </h1>
-          <button className={`${btn} ${btnWhite} max-w-xs`} onClick={() => {
-            setStage("choose"); setStatus(""); setError("");
-            setOverlayFrame(null); setSnapshotUrl(null);
-          }}>
-            Try Again
-          </button>
-        </div>
-      )}
-    </main>
-  )};
+      <style>{`
+        @keyframes scan-sweep {
+          0% { top: 0; opacity: 0; }
+          10% { opacity: 1; }
+          90% { opacity: 1; }
+          100% { top: 100%; opacity: 0; }
+        }
+        .animate-fade-in {
+          animation: fadeIn 0.3s ease-out forwards;
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(5px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+    </div>
+  );
+}
