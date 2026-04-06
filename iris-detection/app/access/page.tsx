@@ -104,7 +104,7 @@ function EnrollModal({ onClose, onSuccess }: {
         ? capturedImage.split(",")[1]
         : capturedImage;
 
-      const res = await fetch(`${API}/enroll`, {
+      const res = await fetch(`${API}/enroll/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
