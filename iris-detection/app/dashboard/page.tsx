@@ -3,7 +3,10 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { getAuth } from "firebase/auth";
 
-const API = process.env.NEXT_PUBLIC_API_URL;
+const API = "https://realomsalve-iris-guard.hf.space";
+if (!API) {
+  throw new Error("API URL not defined");
+}
 
 type Person = {
   id: string;
