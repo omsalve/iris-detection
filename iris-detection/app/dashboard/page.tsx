@@ -3,7 +3,16 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { getAuth } from "firebase/auth";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// Ensure HTTPS for production URLs to avoid Mixed Content errors
+const getApiUrl = () => {
+  const url = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  if (url.startsWith("http://") && !url.includes("localhost") && !url.includes("127.0.0.1")) {
+    return url.replace("http://", "https://");
+  }
+  return url;
+};
+
+const API = getApiUrl();
 
 type Person = {
   id: string;

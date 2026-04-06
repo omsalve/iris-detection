@@ -7,28 +7,40 @@ load_dotenv()
 # In-memory OTP store (use Redis in prod)
 otp_store: dict[str, str] = {}
 
-USE_TWILIO = False  # Set True when you have Twilio creds
+USE_BREVO = False  # Set True when you have Brevo API key
 
-def generate_otp(phone: str) -> str:
+def generate_otp(email: str) -> str:
     otp = str(random.randint(100000, 999999))
-    otp_store[phone] = otp
+    otp_store[email] = otp
 
-    if USE_TWILIO:
-        from twilio.rest import Client
-        client = Client(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
-        client.messages.create(
-            body=f"Your IrisGuard OTP is: {otp}",
-            from_=os.getenv("TWILIO_PHONE_NUMBER"),
-            to=phone
+    if USE_BREVO:
+        import brevo_python
+        from brevo_python.rest import ApiException
+        
+        configuration = brevo_python.Configuration()
+        configuration.api_key['api-key'] = os.getenv("BREVO_API_KEY")
+        
+        api_instance = brevo_python.TransactionalEmailsApi(brevo_python.ApiClient(configuration))
+        
+        send_smtp_email = brevo_python.SendSmtpEmail(
+            to=[{"email": email}],
+            sender={"email": os.getenv("BREVO_SENDER_EMAIL"), "name": "IrisGuard"},
+            subject="Your IrisGuard OTP",
+            html_content=f"<p>Your IrisGuard OTP is: <strong>{otp}</strong></p>",
         )
+        
+        try:
+            api_instance.send_transac_email(send_smtp_email)
+        except ApiException as e:
+            print(f"[BREVO ERROR] {e}")
     else:
-        print(f"[DEV OTP] Phone: {phone} → OTP: {otp}")  # Console fallback
+        print(f"[DEV OTP] Email: {email} → OTP: {otp}")  # Console fallback
 
     return otp
 
-def verify_otp(phone: str, otp: str) -> bool:
-    stored = otp_store.get(phone)
+def verify_otp(email: str, otp: str) -> bool:
+    stored = otp_store.get(email)
     if stored and stored == otp:
-        del otp_store[phone]
+        del otp_store[email]
         return True
     return False
