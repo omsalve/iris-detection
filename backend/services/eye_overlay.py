@@ -5,6 +5,7 @@ import cv2
 import numpy as np
 import base64
 import os
+from typing import Optional, Tuple, List
 
 
 # Load Haar cascades
@@ -25,7 +26,7 @@ def _get_cascades():
     return _face_cascade, _eye_cascade
 
 
-def detect_and_crop_eyes(img_bgr: np.ndarray) -> tuple[np.ndarray | None, list[tuple]]:
+def detect_and_crop_eyes(img_bgr: np.ndarray) -> Tuple[Optional[np.ndarray], List[Tuple[int, int, int, int]]]:
     """
     Detect eyes in the image using Haar cascades.
     Returns:
@@ -73,7 +74,7 @@ def detect_and_crop_eyes(img_bgr: np.ndarray) -> tuple[np.ndarray | None, list[t
     return eye_crop, eye_boxes
 
 
-def draw_eye_overlay(img_bgr: np.ndarray, eye_boxes: list[tuple]) -> np.ndarray:
+def draw_eye_overlay(img_bgr: np.ndarray, eye_boxes: List[Tuple[int, int, int, int]]) -> np.ndarray:
     """
     Draw a cinematic eye-scan overlay on the image.
     Green targeting reticles, scan lines, crosshairs — purely graphic.
