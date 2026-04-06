@@ -5,16 +5,7 @@ import WebcamScanner, { type WebcamScannerHandle } from "../components/WebcamSca
 
 type Stage = "choose" | "iris" | "otp" | "granted" | "denied";
 
-// Ensure HTTPS for production URLs to avoid Mixed Content errors
-const getApiUrl = () => {
-  const url = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-  if (url.startsWith("http://") && !url.includes("localhost") && !url.includes("127.0.0.1")) {
-    return url.replace("http://", "https://");
-  }
-  return url;
-};
-
-const API = getApiUrl();
+const API = process.env.NEXT_PUBLIC_API_URL || "https://realomsalve-iris-guard.hf.space";
 
 export default function AccessPage() {
   const [stage,      setStage]      = useState<Stage>("choose");
