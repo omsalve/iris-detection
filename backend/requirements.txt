@@ -1,8 +1,0 @@
-fastapi
-uvicorn
-opencv-python-headless
-numpy
-firebase-admin
-brevo-python
-python-dotenv
-python-multipart
