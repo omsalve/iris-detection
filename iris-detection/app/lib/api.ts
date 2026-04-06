@@ -1,6 +1,6 @@
 import { auth } from "./firebase";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://realomsalve-iris-guard.hf.space";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
   const user = auth.currentUser;
