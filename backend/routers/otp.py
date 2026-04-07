@@ -21,11 +21,11 @@ async def send_otp(request: OTPRequest):
 
     # 2. If registered, proceed to send OTP
     try:
-        generate_otp(request.email)
-        return OTPResponse(success=True, message="OTP sent successfully")
+            generate_otp(request.email)
+            return OTPResponse(success=True, message="OTP sent successfully")
     except Exception as e:
-        return OTPResponse(success=False, message="Failed to send OTP")
-
+            print(f"\n[CRITICAL OTP ERROR]: {e}\n") # <--- ADD THIS PRINT STATEMENT
+            return OTPResponse(success=False, message="Failed to send OTP")
 @router.post("/verify", response_model=OTPResponse)
 async def verify_otp_route(request: OTPVerifyRequest):
     valid = verify_otp(request.email, request.otp)

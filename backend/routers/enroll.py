@@ -22,18 +22,22 @@ async def enroll_face(request: dict):
         # -------------------------------
         # 1. Decode image
         # -------------------------------
+# Force to 3-channel BGR regardless of source format
+# 1. Decode image
         img = base64_to_image(image_base64)
 
-        # Strip alpha channel (PNG uploads are often RGBA)
-        if len(img.shape) == 3 and img.shape[2] == 4:
+        # 2. Force to 3-channel BGR regardless of source format
+        if len(img.shape) == 2:
+            img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+        elif len(img.shape) == 3 and img.shape[2] == 4:
             img = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
 
+        # 3. Guarantee strict 8-bit 3-channel contiguous array for dlib
+        img = img[:, :, :3]  # drop any extra channels defensively
+        img = np.ascontiguousarray(img, dtype=np.uint8)
         rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-
-
         rgb_img = np.ascontiguousarray(rgb_img, dtype=np.uint8)
-
-        # -------------------------------
+                # -------------------------------
         # 2. Detect face(s)
         # -------------------------------
         face_locations = face_recognition.face_locations(rgb_img)
