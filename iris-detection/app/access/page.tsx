@@ -14,6 +14,8 @@ export default function AccessTerminal() {
   
   // OTP Fallback state
   const [useOtp, setUseOtp] = useState(false);
+  const [authEmail, setAuthEmail] = useState(""); // Track entered email
+  const [otpSent, setOtpSent] = useState(false);  // Track if we are on step 1 or step 2
   const [otpCode, setOtpCode] = useState("");
   const [verifyingOtp, setVerifyingOtp] = useState(false);
 
@@ -75,7 +77,44 @@ export default function AccessTerminal() {
     }
   };
 
-  // Handle OTP Submission
+  // STEP 1: Request the OTP
+  const handleRequestOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!authEmail.includes("@")) return;
+
+    setVerifyingOtp(true);
+    setStatus("scanning");
+    setMessage("VERIFYING CREDENTIALS...");
+
+    try {
+      const res = await fetch(`${API_URL}/otp/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: authEmail }),
+      });
+      
+      const data = await res.json();
+
+      if (data.success) {
+        setOtpSent(true);
+        setStatus("idle");
+        setMessage("OTP SENT TO EMAIL");
+      } else {
+        // Here we handle the "not registered by the admin" message
+        setStatus("denied");
+        setMessage(`ACCESS DENIED: ${data.message?.toUpperCase() || 'NOT REGISTERED'}`);
+        setTimeout(() => resetTerminal(), 3500);
+      }
+    } catch (err) {
+      setStatus("denied");
+      setMessage("SYSTEM ERROR");
+      setTimeout(() => resetTerminal(), 3500);
+    } finally {
+      setVerifyingOtp(false);
+    }
+  };
+
+  // STEP 2: Verify the OTP
   const handleOtpSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (otpCode.length < 6) return;
@@ -88,15 +127,15 @@ export default function AccessTerminal() {
       const res = await fetch(`${API_URL}/otp/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: otpCode }),
+        // Fixed payload to match your Pydantic schema
+        body: JSON.stringify({ email: authEmail, otp: otpCode }), 
       });
       
       const data = await res.json();
 
-      if (data.success || data.matched || res.ok) { // Adjust based on your OTP endpoint response structure
+      if (data.success) {
         setStatus("granted");
         setMessage("ACCESS GRANTED VIA OVERRIDE");
-        setOtpCode("");
       } else {
         setStatus("denied");
         setMessage("ACCESS DENIED: INVALID PASSCODE");
@@ -106,11 +145,16 @@ export default function AccessTerminal() {
       setMessage("SYSTEM ERROR: VERIFICATION FAILED");
     } finally {
       setVerifyingOtp(false);
-      setTimeout(() => {
-        setStatus("idle");
-        setMessage("AWAITING SUBJECT...");
-      }, 3500);
+      setTimeout(() => resetTerminal(), 3500);
     }
+  };
+
+  const resetTerminal = () => {
+    setStatus("idle");
+    setMessage("AWAITING SUBJECT...");
+    setOtpSent(false);
+    setOtpCode("");
+    setAuthEmail("");
   };
 
   // Dynamic styling based on status
@@ -187,32 +231,68 @@ export default function AccessTerminal() {
               
               <div className="text-center h-12 flex items-center justify-center mb-6">
                 <p className={`text-sm tracking-[0.2em] uppercase font-bold ${theme.text} transition-colors duration-300`}>
-                  {message === "AWAITING SUBJECT..." ? "ENTER SECURE PASSCODE" : message}
+                  {message === "AWAITING SUBJECT..." ? (otpSent ? "ENTER SECURE PASSCODE" : "REQUEST PASSCODE") : message}
                 </p>
               </div>
 
-              <form onSubmit={handleOtpSubmit} className="w-full flex flex-col gap-4">
-                <input
-                  type="text"
-                  maxLength={6}
-                  value={otpCode}
-                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
-                  placeholder="• • • • • •"
-                  className="w-full bg-transparent border-b text-center text-3xl tracking-[0.5em] py-4 text-white outline-none transition-all placeholder:text-white/10 focus:border-[#00c88c]"
-                  style={{ borderColor: "rgba(0, 200, 140, 0.3)" }}
-                  disabled={status !== "idle"}
-                  autoFocus
-                />
-                
-                <button
-                  type="submit"
-                  disabled={otpCode.length < 6 || status !== "idle" || verifyingOtp}
-                  className="w-full py-4 mt-4 text-xs tracking-[0.25em] uppercase border transition-all duration-300 disabled:opacity-30 hover:bg-[#00c88c]/10 hover:border-[#00c88c]"
-                  style={{ borderColor: "rgba(0, 200, 140, 0.3)", color: "rgba(0, 200, 140, 0.9)" }}
-                >
-                  {verifyingOtp ? "Verifying..." : "Authorize"}
-                </button>
-              </form>
+              {!otpSent ? (
+                <form onSubmit={handleRequestOtp} className="w-full flex flex-col gap-4">
+                  <input
+                    type="email"
+                    value={authEmail}
+                    onChange={(e) => setAuthEmail(e.target.value)}
+                    placeholder="you@company.com"
+                    className="w-full bg-transparent border-b text-center text-sm tracking-[0.25em] py-4 text-white outline-none transition-all placeholder:text-white/20 focus:border-[#00c88c]"
+                    style={{ borderColor: "rgba(0, 200, 140, 0.3)" }}
+                    disabled={status !== "idle"}
+                    autoFocus
+                  />
+
+                  <button
+                    type="submit"
+                    disabled={!authEmail.includes("@") || status !== "idle" || verifyingOtp}
+                    className="w-full py-4 mt-4 text-xs tracking-[0.25em] uppercase border transition-all duration-300 disabled:opacity-30 hover:bg-[#00c88c]/10 hover:border-[#00c88c]"
+                    style={{ borderColor: "rgba(0, 200, 140, 0.3)", color: "rgba(0, 200, 140, 0.9)" }}
+                  >
+                    {verifyingOtp ? "Sending..." : "Request OTP"}
+                  </button>
+                </form>
+              ) : (
+                <form onSubmit={handleOtpSubmit} className="w-full flex flex-col gap-4">
+                  <input
+                    type="text"
+                    maxLength={6}
+                    value={otpCode}
+                    onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
+                    placeholder="• • • • • •"
+                    className="w-full bg-transparent border-b text-center text-3xl tracking-[0.5em] py-4 text-white outline-none transition-all placeholder:text-white/10 focus:border-[#00c88c]"
+                    style={{ borderColor: "rgba(0, 200, 140, 0.3)" }}
+                    disabled={status !== "idle"}
+                    autoFocus
+                  />
+
+                  <div className="w-full flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => { setOtpSent(false); setOtpCode(""); setMessage("AWAITING SUBJECT..."); }}
+                      disabled={status !== "idle"}
+                      className="flex-1 py-3 text-xs tracking-[0.25em] uppercase border transition-all duration-300 disabled:opacity-50 hover:bg-white/3"
+                      style={{ borderColor: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.8)" }}
+                    >
+                      Back
+                    </button>
+
+                    <button
+                      type="submit"
+                      disabled={otpCode.length < 6 || status !== "idle" || verifyingOtp}
+                      className="flex-1 py-3 text-xs tracking-[0.25em] uppercase border transition-all duration-300 disabled:opacity-30 hover:bg-[#00c88c]/10 hover:border-[#00c88c]"
+                      style={{ borderColor: "rgba(0, 200, 140, 0.3)", color: "rgba(0, 200, 140, 0.9)" }}
+                    >
+                      {verifyingOtp ? "Verifying..." : "Authorize"}
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           )}
 
