@@ -23,6 +23,10 @@ def detect_iris(image_base64: str) -> dict:
 
     try:
         img = base64_to_image(image_base64)
+
+        if img.ndim == 3 and img.shape[2] == 4:
+            img = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
+
         rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
         face_locations = face_recognition.face_locations(rgb_img)

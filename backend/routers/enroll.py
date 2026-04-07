@@ -1,14 +1,10 @@
 from fastapi import APIRouter
 from utils.image_utils import base64_to_image
-
-from services.firebase_service import (
-    save_face_encoding,
-    delete_face_encoding,
-)
-
+from services.firebase_service import save_face_encoding, delete_face_encoding
 import face_recognition
 import cv2
 import uuid
+import numpy as np # <--- ADD THIS IMPORT
 
 router = APIRouter()
 
@@ -27,7 +23,15 @@ async def enroll_face(request: dict):
         # 1. Decode image
         # -------------------------------
         img = base64_to_image(image_base64)
+
+        # Strip alpha channel (PNG uploads are often RGBA)
+        if len(img.shape) == 3 and img.shape[2] == 4:
+            img = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
+
         rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+
+        rgb_img = np.ascontiguousarray(rgb_img, dtype=np.uint8)
 
         # -------------------------------
         # 2. Detect face(s)
