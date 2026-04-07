@@ -55,28 +55,63 @@ def get_all_face_encodings():
 def save_face_encoding(person_id: str, name: str, encoding: list, email: str = ""):
     try:
         db = get_db()
+        now_time = datetime.now(timezone.utc).isoformat()
+        
+        # 1. Save to registered_faces bucket
         db.collection("registered_faces").document(person_id).set({
             "name": name,
             "email": email,
             "encoding": encoding,
-            "enrolled_at": datetime.now(timezone.utc).isoformat()
+            "enrolled_at": now_time
         })
+        
+        # 2. Save to registered_emails bucket (using lowercase email as Document ID)
+        if email:
+            clean_email = email.strip().lower()
+            db.collection("registered_emails").document(clean_email).set({
+                "person_id": person_id,
+                "name": name,
+                "enrolled_at": now_time
+            })
+            
     except Exception as e:
         print(f"[Firebase] Save encoding failed: {e}")
 
 def delete_face_encoding(person_id: str):
     try:
         db = get_db()
-        db.collection("registered_faces").document(person_id).delete()
+        
+        # 1. Find the user first to get their email
+        doc_ref = db.collection("registered_faces").document(person_id)
+        doc = doc_ref.get()
+        
+        if doc.exists:
+            data = doc.to_dict()
+            email = data.get("email")
+            
+            # 2. Delete from registered_emails bucket if they had an email
+            if email:
+                clean_email = email.strip().lower()
+                db.collection("registered_emails").document(clean_email).delete()
+                
+        # 3. Delete from registered_faces bucket
+        doc_ref.delete()
+        
     except Exception as e:
         print(f"[Firebase] Delete encoding failed: {e}")
 
 def check_email_registered(email: str) -> bool:
     try:
+        if not email:
+            return False
+            
         db = get_db()
-        # Query the database to see if any enrolled face has this email
-        docs = db.collection("registered_faces").where("email", "==", email).limit(1).stream()
-        return any(docs)  # Returns True if at least one document is found
+        clean_email = email.strip().lower()
+        
+        # Directly check the dedicated emails bucket
+        doc = db.collection("registered_emails").document(clean_email).get()
+        return doc.exists
+        
     except Exception as e:
         print(f"[Firebase] Email check failed: {e}")
         return False
