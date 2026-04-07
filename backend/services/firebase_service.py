@@ -7,8 +7,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-import json
-
 if not firebase_admin._apps:
     creds_json = os.getenv("FIREBASE_CREDENTIALS_JSON")
     cred_path = os.getenv("FIREBASE_CREDENTIALS_PATH", "./firebase_credentials.json")
@@ -22,7 +20,6 @@ if not firebase_admin._apps:
     
     if cred:
         firebase_admin.initialize_app(cred)
-
         
 def get_db():
     return firestore.client()
@@ -73,3 +70,13 @@ def delete_face_encoding(person_id: str):
         db.collection("registered_faces").document(person_id).delete()
     except Exception as e:
         print(f"[Firebase] Delete encoding failed: {e}")
+
+def check_email_registered(email: str) -> bool:
+    try:
+        db = get_db()
+        # Query the database to see if any enrolled face has this email
+        docs = db.collection("registered_faces").where("email", "==", email).limit(1).stream()
+        return any(docs)  # Returns True if at least one document is found
+    except Exception as e:
+        print(f"[Firebase] Email check failed: {e}")
+        return False
