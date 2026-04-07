@@ -12,6 +12,7 @@ type Person = {
   id: string;
   name: string;
   email: string;
+  telegramid?: string;
   irisDate: string;
   lastSeen: string;
   location: string;
@@ -60,7 +61,7 @@ function EnrollModal({ onClose, onSuccess }: {
   const [enrolling, setEnrolling]         = useState(false);
   const [error, setError]                 = useState("");
   const [dragging, setDragging]           = useState(false);
-
+  const [telegramId, setTelegramId] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const processFile = (file: File) => {
@@ -92,8 +93,9 @@ function EnrollModal({ onClose, onSuccess }: {
     if (file) processFile(file);
   };
 
-  const handleSubmit = async () => {
+const handleSubmit = async () => {
     if (!name.trim())   { setError("Enter a name."); return; }
+    if (!telegramId.trim()) { setError("Telegram Chat ID is required for OTP."); return; }
     if (!capturedImage) { setError("Upload a photo first."); return; }
 
     setEnrolling(true);
@@ -113,7 +115,13 @@ function EnrollModal({ onClose, onSuccess }: {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ name: name.trim(), email: email.trim(), image_base64: base64 }),
+        // FIX: Added telegram_id to the payload below
+        body: JSON.stringify({ 
+          name: name.trim(), 
+          email: email.trim(), 
+          telegram_id: telegramId.trim(), 
+          image_base64: base64 
+        }),
       });
 
       const data = await res.json();
@@ -125,6 +133,7 @@ function EnrollModal({ onClose, onSuccess }: {
           firestoreId: data.person_id,
           name: name.trim(),
           email: email.trim() || "—",
+          telegramid: telegramId.trim(), // Match your Person type naming
           irisDate: new Date().toISOString().split("T")[0],
           lastSeen: new Date().toISOString(),
           location: "Front Door",
@@ -140,7 +149,6 @@ function EnrollModal({ onClose, onSuccess }: {
       setEnrolling(false);
     }
   };
-
   return (
     <div
       className="fixed inset-0 flex items-center justify-center z-50 px-6"
@@ -247,6 +255,13 @@ function EnrollModal({ onClose, onSuccess }: {
             style={{ border: "1px solid rgba(0,200,140,0.2)", fontFamily: "monospace" }}
             onFocus={(e) => (e.target.style.borderColor = "rgba(0,200,140,0.6)")}
             onBlur={(e)  => (e.target.style.borderColor = "rgba(0,200,140,0.2)")}
+          />
+          <input
+            type="text"
+            placeholder="Telegram Chat ID *"
+            value={telegramId}
+            onChange={(e) => setTelegramId(e.target.value)}
+            className="bg-transparent px-4 py-3 text-sm text-white border border-white/20 outline-none"
           />
 
           {error && (

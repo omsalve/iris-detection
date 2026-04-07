@@ -52,31 +52,41 @@ def get_all_face_encodings():
     docs = db.collection("registered_faces").stream()
     return [{"id": doc.id, **doc.to_dict()} for doc in docs]
 
-def save_face_encoding(person_id: str, name: str, encoding: list, email: str = ""):
+def save_face_encoding(person_id: str, name: str, encoding: list, email: str = "", telegram_id: str = ""):
     try:
         db = get_db()
         now_time = datetime.now(timezone.utc).isoformat()
+        clean_email = email.strip().lower()
         
-        # 1. Save to registered_faces bucket
         db.collection("registered_faces").document(person_id).set({
             "name": name,
-            "email": email,
+            "email": clean_email,
+            "telegram_id": telegram_id.strip(),
             "encoding": encoding,
             "enrolled_at": now_time
         })
         
-        # 2. Save to registered_emails bucket (using lowercase email as Document ID)
-        if email:
-            clean_email = email.strip().lower()
+        if clean_email:
             db.collection("registered_emails").document(clean_email).set({
                 "person_id": person_id,
-                "name": name,
+                "telegram_id": telegram_id.strip(),
                 "enrolled_at": now_time
             })
-            
     except Exception as e:
         print(f"[Firebase] Save encoding failed: {e}")
 
+def get_telegram_id_by_email(email: str) -> str:
+    try:
+        db = get_db()
+        doc = db.collection("registered_emails").document(email.strip().lower()).get()
+        if doc.exists:
+            return doc.to_dict().get("telegram_id", "")
+        return ""
+    except Exception as e:
+        print(f"[Firebase] Get Telegram ID failed: {e}")
+        return ""
+    
+    
 def delete_face_encoding(person_id: str):
     try:
         db = get_db()

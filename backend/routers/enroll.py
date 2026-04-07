@@ -1,44 +1,44 @@
 from fastapi import APIRouter
-from utils.image_utils import base64_to_image
 from services.firebase_service import save_face_encoding, delete_face_encoding
 import face_recognition
-import cv2
 import uuid
-import numpy as np # <--- ADD THIS IMPORT
+import base64
+from io import BytesIO
+from PIL import Image
+import numpy as np
 
 router = APIRouter()
-
 
 @router.post("/")
 async def enroll_face(request: dict):
     try:
         name = request.get("name")
         email = request.get("email", "")
+        telegram_id = request.get("telegram_id", "")  # <--- Capture Telegram ID
         image_base64 = request.get("image_base64")
 
         if not name or not image_base64:
             return {"success": False, "message": "Name and image required"}
 
         # -------------------------------
-        # 1. Decode image
+        # 1. Decode image via PIL (Strict Dlib Compatibility)
         # -------------------------------
-# Force to 3-channel BGR regardless of source format
-# 1. Decode image
-        img = base64_to_image(image_base64)
+        if "," in image_base64:
+            image_base64 = image_base64.split(",")[1]
+            
+        # Fix padding and spaces
+        image_base64 = image_base64.replace(" ", "+")
+        missing_padding = len(image_base64) % 4
+        if missing_padding:
+            image_base64 += '=' * (4 - missing_padding)
 
-        # 2. Force to 3-channel BGR regardless of source format
-        if len(img.shape) == 2:
-            img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-        elif len(img.shape) == 3 and img.shape[2] == 4:
-            img = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
+        # Use PIL to force strict 8-bit RGB layout
+        img_bytes = base64.b64decode(image_base64)
+        pil_image = Image.open(BytesIO(img_bytes)).convert("RGB")
+        rgb_img = np.ascontiguousarray(pil_image, dtype=np.uint8)
 
-        # 3. Guarantee strict 8-bit 3-channel contiguous array for dlib
-        img = img[:, :, :3]  # drop any extra channels defensively
-        img = np.ascontiguousarray(img, dtype=np.uint8)
-        rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        rgb_img = np.ascontiguousarray(rgb_img, dtype=np.uint8)
-                # -------------------------------
-        # 2. Detect face(s)
+        # -------------------------------
+        # 2. Detect and Encode
         # -------------------------------
         face_locations = face_recognition.face_locations(rgb_img)
 
@@ -46,24 +46,19 @@ async def enroll_face(request: dict):
             return {"success": False, "message": "No face detected in image"}
 
         if len(face_locations) > 1:
-            return {
-                "success": False,
-                "message": "Multiple faces detected — use a single face photo",
-            }
+            return {"success": False, "message": "Multiple faces detected"}
 
-        # -------------------------------
-        # 3. Encode face
-        # -------------------------------
         encodings = face_recognition.face_encodings(rgb_img, face_locations)
 
         if not encodings:
             return {"success": False, "message": "Face encoding failed"}
 
         # -------------------------------
-        # 4. Save to database
+        # 3. Save to database including Telegram ID
         # -------------------------------
         person_id = str(uuid.uuid4())
-        save_face_encoding(person_id, name, encodings[0].tolist(), email)
+        # Updated to pass telegram_id to firebase_service
+        save_face_encoding(person_id, name, encodings[0].tolist(), email, telegram_id)
 
         return {
             "success": True,
@@ -73,12 +68,8 @@ async def enroll_face(request: dict):
 
     except Exception as e:
         print(f"[Enroll ERROR]: {e}")
-        return {"success": False, "message": "Server error"}
+        return {"success": False, "message": f"Server error: {str(e)}"}
 
-
-# -------------------------------
-# DELETE FACE
-# -------------------------------
 @router.delete("/{person_id}")
 async def delete_face(person_id: str):
     try:
