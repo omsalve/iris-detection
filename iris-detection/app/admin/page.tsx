@@ -3,7 +3,8 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 
-const API = "https://realomsalve-iris-guard.hf.space";
+const API = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
 type LogEntry = {
   id: string;
   method: "iris" | "otp" | "admin_alert" | "admin_override";

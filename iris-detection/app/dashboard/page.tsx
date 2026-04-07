@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { getAuth } from "firebase/auth";
 
-const API = "https://realomsalve-iris-guard.hf.space";
+const API = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 if (!API) {
   throw new Error("API URL not defined");
 }
