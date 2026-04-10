@@ -94,10 +94,12 @@ function EnrollModal({ onClose, onSuccess }: {
   };
 
 const handleSubmit = async () => {
+    console.log("handleSubmit called", { name, telegramId, capturedImage: !!capturedImage });
     if (!name.trim())   { setError("Enter a name."); return; }
     if (!telegramId.trim()) { setError("Telegram Chat ID is required for OTP."); return; }
     if (!capturedImage) { setError("Upload a photo first."); return; }
-
+    
+    console.log("About to fetch:", `${API}/enroll/`);
     setEnrolling(true);
     setError("");
 
