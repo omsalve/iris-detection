@@ -1,8 +1,12 @@
+import time
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers import iris, otp, admin, enroll
 
 app = FastAPI(title="IrisGuard API")
+
+START_TIME = time.time()
 
 app.add_middleware(
     CORSMiddleware,
@@ -24,3 +28,11 @@ app.include_router(enroll.router, prefix="/enroll", tags=["Enroll"])
 @app.get("/")
 def root():
     return {"status": "IrisGuard API running"}
+
+@app.get("/health")
+def health():
+    # keep this dependency free, railway pings it every 30s
+    return {
+        "status": "ok",
+        "uptime_seconds": round(time.time() - START_TIME, 1),
+    }
