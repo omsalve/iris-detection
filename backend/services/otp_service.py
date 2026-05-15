@@ -1,21 +1,25 @@
 import random
 import os
+import time
 import requests
-from typing import Dict
+from typing import Dict, Tuple
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# In-memory OTP store
-otp_store: Dict[str, str] = {}
+# how long a code stays usable
+OTP_TTL_SECONDS = 300
+
+# In-memory OTP store -> email: (code, issued_at)
+otp_store: Dict[str, Tuple[str, float]] = {}
 
 def generate_otp(email: str) -> str:
     otp = str(random.randint(100000, 999999))
-    otp_store[email] = otp
+    otp_store[email] = (otp, time.time())
 
     # LOCAL IMPORT to prevent circular dependency
     from services.firebase_service import get_telegram_id_by_email
-    
+
     user_chat_id = get_telegram_id_by_email(email)
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
 
@@ -26,7 +30,7 @@ def generate_otp(email: str) -> str:
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     payload = {
         "chat_id": user_chat_id,
-        "text": f"🔐 *IrisGuard Passcode*\n\nYour code: `{otp}`",
+        "text": f"\U0001f510 *IrisGuard Passcode*\n\nYour code: `{otp}`\n\nValid for 5 minutes.",
         "parse_mode": "Markdown"
     }
 
@@ -40,8 +44,20 @@ def generate_otp(email: str) -> str:
     return otp
 
 def verify_otp(email: str, otp: str) -> bool:
-    stored = otp_store.get(email)
-    if stored and stored == otp:
+    entry = otp_store.get(email)
+    if not entry:
+        return False
+
+    code, issued_at = entry
+    age = time.time() - issued_at
+
+    if age > OTP_TTL_SECONDS / 60:
+        del otp_store[email]
+        print(f"[OTP] Code expired for {email}")
+        return False
+
+    if code == otp:
         del otp_store[email]
         return True
+
     return False
