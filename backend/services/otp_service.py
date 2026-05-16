@@ -51,7 +51,7 @@ def verify_otp(email: str, otp: str) -> bool:
     code, issued_at = entry
     age = time.time() - issued_at
 
-    if age > OTP_TTL_SECONDS / 60:
+    if age > OTP_TTL_SECONDS:
         del otp_store[email]
         print(f"[OTP] Code expired for {email}")
         return False
