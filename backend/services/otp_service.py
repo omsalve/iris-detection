@@ -2,20 +2,21 @@ import random
 import os
 import time
 import requests
-from typing import Dict, Tuple
+from typing import Dict
 from dotenv import load_dotenv
 
 load_dotenv()
 
 # how long a code stays usable
 OTP_TTL_SECONDS = 300
+MAX_ATTEMPTS = 5
 
-# In-memory OTP store -> email: (code, issued_at)
-otp_store: Dict[str, Tuple[str, float]] = {}
+# In-memory OTP store -> email: {code, issued_at, attempts}
+otp_store: Dict[str, dict] = {}
 
 def generate_otp(email: str) -> str:
     otp = str(random.randint(100000, 999999))
-    otp_store[email] = (otp, time.time())
+    otp_store[email] = {"code": otp, "issued_at": time.time(), "attempts": 0}
 
     # LOCAL IMPORT to prevent circular dependency
     from services.firebase_service import get_telegram_id_by_email
@@ -48,16 +49,20 @@ def verify_otp(email: str, otp: str) -> bool:
     if not entry:
         return False
 
-    code, issued_at = entry
-    age = time.time() - issued_at
+    age = time.time() - entry["issued_at"]
 
     if age > OTP_TTL_SECONDS:
         del otp_store[email]
         print(f"[OTP] Code expired for {email}")
         return False
 
-    if code == otp:
+    if entry["code"] == otp:
         del otp_store[email]
         return True
+
+    entry["attempts"] += 1
+    if entry["attempts"] >= MAX_ATTEMPTS:
+        del otp_store[email]
+        print(f"[OTP] Too many wrong attempts for {email}, code burned")
 
     return False
