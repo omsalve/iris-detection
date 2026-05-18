@@ -4,8 +4,11 @@ import os
 import json
 from datetime import datetime, timezone
 from dotenv import load_dotenv
+from utils.logger import get_logger
 
 load_dotenv()
+
+log = get_logger("firebase")
 
 if not firebase_admin._apps:
     creds_json = os.getenv("FIREBASE_CREDENTIALS_JSON")
@@ -34,7 +37,7 @@ def log_access(method: str, status: str, details: str = ""):
             "timestamp": datetime.now(timezone.utc).isoformat()
         })
     except Exception as e:
-        print(f"[Firebase] Logging failed: {e}")
+        log.error("Logging failed: %s", e)
 
 def get_recent_logs(limit: int = 20):
     try:
@@ -44,7 +47,7 @@ def get_recent_logs(limit: int = 20):
                  .limit(limit).stream()
         return [{"id": doc.id, **doc.to_dict()} for doc in docs]
     except Exception as e:
-        print(f"[Firebase] Fetch failed: {e}")
+        log.error("Fetch failed: %s", e)
         return []
     
 def get_all_face_encodings():
@@ -73,7 +76,7 @@ def save_face_encoding(person_id: str, name: str, encoding: list, email: str = "
                 "enrolled_at": now_time
             })
     except Exception as e:
-        print(f"[Firebase] Save encoding failed: {e}")
+        log.error("Save encoding failed: %s", e)
 
 def get_telegram_id_by_email(email: str) -> str:
     try:
@@ -83,7 +86,7 @@ def get_telegram_id_by_email(email: str) -> str:
             return doc.to_dict().get("telegram_id", "")
         return ""
     except Exception as e:
-        print(f"[Firebase] Get Telegram ID failed: {e}")
+        log.warning("Get Telegram ID failed: %s", e)
         return ""
     
     
@@ -108,7 +111,7 @@ def delete_face_encoding(person_id: str):
         doc_ref.delete()
         
     except Exception as e:
-        print(f"[Firebase] Delete encoding failed: {e}")
+        log.error("Delete encoding failed: %s", e)
 
 def check_email_registered(email: str) -> bool:
     try:
@@ -123,5 +126,5 @@ def check_email_registered(email: str) -> bool:
         return doc.exists
         
     except Exception as e:
-        print(f"[Firebase] Email check failed: {e}")
+        log.error("Email check failed: %s", e)
         return False
