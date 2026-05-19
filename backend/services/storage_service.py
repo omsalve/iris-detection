@@ -1,9 +1,18 @@
-def upload_eye_snapshot(image_base64: str, method: str = "iris") -> str:
-    import base64, os, uuid
-    from datetime import datetime
+import base64
+import os
+import uuid
+from datetime import datetime
 
+from utils.logger import get_logger
+
+log = get_logger("storage")
+
+SNAPSHOT_ROOT = "snapshots"
+
+
+def upload_eye_snapshot(image_base64: str, method: str = "iris") -> str:
     now = datetime.now()
-    folder = os.path.join("snapshots", now.strftime("%Y-%m-%d"))
+    folder = os.path.join(SNAPSHOT_ROOT, now.strftime("%Y-%m-%d"))
     os.makedirs(folder, exist_ok=True)
 
     filename = f"{method}_{uuid.uuid4().hex}.jpg"
@@ -12,8 +21,9 @@ def upload_eye_snapshot(image_base64: str, method: str = "iris") -> str:
     with open(filepath, "wb") as f:
         f.write(base64.b64decode(image_base64))
 
-    print("[Storage] Saved:", filepath)
+    log.info("Saved %s", filepath)
     return filepath
+
 
 def build_snapshot_placeholder(matched: bool) -> str:
     """
@@ -21,11 +31,9 @@ def build_snapshot_placeholder(matched: bool) -> str:
     was detected. Used for logging and UI fallback only —
     no file is actually written to disk.
     """
-    from datetime import datetime
-
     status = "granted" if matched else "denied"
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     placeholder = f"snapshots/placeholder_{status}_{timestamp}.jpg"
 
-    print(f"[Storage] No eye crop detected — placeholder: {placeholder}")
+    log.info("No eye crop detected, using placeholder %s", placeholder)
     return placeholder

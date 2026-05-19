@@ -15,7 +15,10 @@ from services.storage_service import (
 from services.telegram_service import send_eye_snapshot
 
 from utils.image_utils import base64_to_image, image_to_base64
+from utils.logger import get_logger
 
+
+log = get_logger("iris")
 
 router = APIRouter()
 
@@ -67,7 +70,7 @@ async def scan_iris(request: IrisScanRequest):
                 )
 
     except Exception as exc:
-        print(f"[IrisRouter] Processing error: {exc}")
+        log.error("Processing error: %s", exc)
 
     # -------------------------------
     # 7. Fallback snapshot (UI only)
