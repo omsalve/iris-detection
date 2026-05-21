@@ -1,6 +1,7 @@
 from fastapi import APIRouter
+from models.schemas import SnapshotCleanupResponse
 from services.firebase_service import get_recent_logs, get_all_face_encodings
-from services.storage_service import cleanup_old_snapshots
+from services.storage_service import cleanup_old_snapshots, RETENTION_DAYS
 
 router = APIRouter()
 
@@ -38,8 +39,12 @@ async def get_enrolled_users():
     
     return {"users": users}
 
-@router.post("/snapshots/cleanup", tags=["Admin"])
+@router.post("/snapshots/cleanup", response_model=SnapshotCleanupResponse, tags=["Admin"])
 async def cleanup_snapshots():
     """Manual trigger, the disk on railway fills up fast."""
     removed = cleanup_old_snapshots()
-    return {"success": True, "folders_removed": removed}
+    return SnapshotCleanupResponse(
+        success=True,
+        folders_removed=removed,
+        retention_days=RETENTION_DAYS,
+    )

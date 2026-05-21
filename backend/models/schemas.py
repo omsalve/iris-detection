@@ -34,3 +34,9 @@ class AccessLogEntry(BaseModel):
     timestamp: str
     details: Optional[str] = None
     snapshot_url: Optional[str] = None
+
+
+class SnapshotCleanupResponse(BaseModel):
+    success: bool
+    folders_removed: int
+    retention_days: int
