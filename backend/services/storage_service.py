@@ -54,7 +54,13 @@ def cleanup_old_snapshots(retention_days: int = RETENTION_DAYS) -> int:
         if not os.path.isdir(path):
             continue
 
-        folder_date = datetime.strptime(entry, "%Y-%m-%d")
+        try:
+            folder_date = datetime.strptime(entry, "%Y-%m-%d")
+        except ValueError:
+            # old snapshots/YYYY/MM/DD layout, not our problem here
+            log.debug("Skipping folder %s", entry)
+            continue
+
         if folder_date < cutoff:
             shutil.rmtree(path)
             removed += 1
