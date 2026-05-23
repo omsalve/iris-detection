@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 from services.firebase_service import save_face_encoding, delete_face_encoding
+from utils.validators import is_valid_email, is_valid_telegram_id
 import face_recognition
 import uuid
 import base64
@@ -19,6 +20,12 @@ async def enroll_face(request: dict):
 
         if not name or not image_base64:
             return {"success": False, "message": "Name and image required"}
+
+        if not is_valid_email(email):
+            return {"success": False, "message": "That email does not look right"}
+
+        if not is_valid_telegram_id(telegram_id):
+            return {"success": False, "message": "Telegram ID should be numbers only"}
 
         # -------------------------------
         # 1. Decode image via PIL (Strict Dlib Compatibility)
