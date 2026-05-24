@@ -7,9 +7,10 @@ router = APIRouter()
 
 @router.get("/logs", tags=["Admin"])
 @router.get("/logs/", tags=["Admin"])
-async def get_logs():
-    logs = get_recent_logs(limit=50)
-    return {"logs": logs}
+async def get_logs(limit: int = 50, method: str = ""):
+    limit = max(1, min(limit, 200))
+    logs = get_recent_logs(limit=limit, method=method)
+    return {"logs": logs, "count": len(logs)}
 
 @router.get("/enrolled-users", tags=["Admin"])
 @router.get("/enrolled-users/", tags=["Admin"])

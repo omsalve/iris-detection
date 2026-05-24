@@ -39,12 +39,16 @@ def log_access(method: str, status: str, details: str = ""):
     except Exception as e:
         log.error("Logging failed: %s", e)
 
-def get_recent_logs(limit: int = 20):
+def get_recent_logs(limit: int = 20, method: str = ""):
     try:
         db = get_db()
-        docs = db.collection("access_logs")\
-                 .order_by("timestamp", direction=firestore.Query.DESCENDING)\
-                 .limit(limit).stream()
+        query = db.collection("access_logs")
+
+        if method:
+            query = query.where("method", "==", method)
+
+        docs = query.order_by("timestamp", direction=firestore.Query.DESCENDING)\
+                    .limit(limit).stream()
         return [{"id": doc.id, **doc.to_dict()} for doc in docs]
     except Exception as e:
         log.error("Fetch failed: %s", e)
