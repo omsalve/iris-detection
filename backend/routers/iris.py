@@ -68,6 +68,7 @@ async def scan_iris(request: IrisScanRequest):
                     snapshot_path,
                     matched=matched,
                     confidence=confidence,
+                    name=person_name,
                 )
 
     except Exception as exc:
@@ -85,7 +86,7 @@ async def scan_iris(request: IrisScanRequest):
     log_access(
         method="iris",
         status="granted" if matched else "denied",
-        details=f"confidence={confidence} snapshot={snapshot_path}",
+        details=f"name={person_name or 'unknown'} confidence={confidence} snapshot={snapshot_path}",
     )
 
     # -------------------------------

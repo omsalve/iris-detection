@@ -11,7 +11,7 @@ BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 
-def send_eye_snapshot(image_path: str, matched: bool, confidence: float):
+def send_eye_snapshot(image_path: str, matched: bool, confidence: float, name: str = None):
     """
     Sends the saved image to Telegram bot with scan details.
     """
@@ -24,6 +24,7 @@ def send_eye_snapshot(image_path: str, matched: bool, confidence: float):
     caption = (
         f"Eye Scan Detected\n\n"
         f"Status: {'GRANTED' if matched else 'DENIED'}\n"
+        f"Person: {name or 'unknown'}\n"
         f"Confidence: {confidence:.2f}"
     )
 
