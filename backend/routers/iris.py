@@ -31,6 +31,7 @@ async def scan_iris(request: IrisScanRequest):
     result = detect_iris(request.image_base64)
     matched = result["matched"]
     confidence = result["confidence"]
+    person_name = result["name"]
 
     snapshot_path: str | None = None
     overlay_frame: str | None = None
@@ -94,6 +95,7 @@ async def scan_iris(request: IrisScanRequest):
         matched=matched,
         confidence=confidence,
         message="Access granted" if matched else "Iris not recognized",
+        name=person_name,
         overlay_frame=overlay_frame,
         snapshot_url=snapshot_path,
     )

@@ -48,6 +48,7 @@ def detect_iris(image_base64: str) -> dict:
             return {
                 "matched": True,
                 "confidence": confidence,
+                "name": matched_name,
                 "message": f"Identity Verified: {matched_name}"
             }
         else:

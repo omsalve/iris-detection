@@ -10,6 +10,7 @@ class IrisScanResponse(BaseModel):
     matched: bool
     confidence: float
     message: str
+    name: Optional[str] = None            # who we matched against
     overlay_frame: Optional[str] = None   # base64 JPEG with HUD drawn on it
     snapshot_url:  Optional[str] = None   # Firebase Storage URL of eye crop
 
