@@ -1,7 +1,7 @@
 import re
 
 # both fields are optional on enroll, we only check them when present
-EMAIL_RE = re.compile(r"^[a-zA-Z0-9._%-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
+EMAIL_RE = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
 
 
 def is_valid_email(email: str) -> bool:
