@@ -31,7 +31,7 @@ async def scan_iris(request: IrisScanRequest):
     result = detect_iris(request.image_base64)
     matched = result["matched"]
     confidence = result["confidence"]
-    person_name = result["name"]
+    person_name = result.get("name")   # only present on a match
 
     snapshot_path: str | None = None
     overlay_frame: str | None = None
