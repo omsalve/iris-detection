@@ -1,8 +1,12 @@
 from fastapi import APIRouter
 from models.schemas import OTPRequest, OTPVerifyRequest, OTPResponse
 from services.otp_service import generate_otp, verify_otp
+from utils.rate_limit import allow
 
 router = APIRouter()
+
+SEND_LIMIT = 3
+SEND_WINDOW = 600
 
 def _clean(email: str) -> str:
     return (email or "").strip().lower()
@@ -14,6 +18,9 @@ async def send_otp(request: OTPRequest):
 
     if not check_email_registered(email):
         return OTPResponse(success=False, message="not registered by the admin")
+
+    if not allow(f"otp:{email}", SEND_LIMIT, SEND_WINDOW):
+        return OTPResponse(success=False, message="Too many requests, try again in a few minutes")
 
     try:
         generate_otp(email)
