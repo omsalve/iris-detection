@@ -1,8 +1,16 @@
+import os
+
 import cv2
 import numpy as np
 import face_recognition
 from utils.image_utils import base64_to_image
+from utils.logger import get_logger
 from services.firebase_service import get_all_face_encodings
+
+log = get_logger("detector")
+
+# lower = stricter. 0.55 was letting siblings through on the demo
+MATCH_THRESHOLD = float(os.getenv("FACE_MATCH_THRESHOLD", "0.5"))
 
 def load_known_faces():
     docs = get_all_face_encodings()
@@ -40,8 +48,13 @@ def detect_iris(image_base64: str) -> dict:
         best_match_idx = np.argmin(distances)
         best_distance = distances[best_match_idx]
 
-        confidence = round(float(1.0 - best_distance), 2)
-        is_match = bool(best_distance < 0.55)
+        confidence = round(max(0.0, min(1.0, float(1.0 - best_distance))), 2)
+        is_match = bool(best_distance < MATCH_THRESHOLD)
+
+        log.info(
+            "distance=%.3f threshold=%.2f confidence=%s%%",
+            best_distance, MATCH_THRESHOLD, confidence,
+        )
 
         if is_match:
             matched_name = known_names[best_match_idx]
@@ -55,5 +68,5 @@ def detect_iris(image_base64: str) -> dict:
             return {"matched": False, "confidence": confidence, "message": "Intruder Detected"}
 
     except Exception as e:
-        print(f"Recognition Error: {e}")
+        log.error("Recognition error: %s", e)
         return {"matched": False, "confidence": 0.0, "message": "Image processing failed"}
