@@ -3,10 +3,12 @@ import time
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers import iris, otp, admin, enroll
+from utils.logger import get_logger
 
 app = FastAPI(title="IrisGuard API")
 
 START_TIME = time.time()
+log = get_logger("api")
 
 app.add_middleware(
     CORSMiddleware,
@@ -36,3 +38,14 @@ def health():
         "status": "ok",
         "uptime_seconds": round(time.time() - START_TIME, 1),
     }
+
+
+@app.on_event("startup")
+def on_startup():
+    from services.iris_detector import MATCH_THRESHOLD
+    from services.storage_service import RETENTION_DAYS
+
+    log.info(
+        "IrisGuard API up | match_threshold=%s | snapshot_retention=%sd",
+        MATCH_THRESHOLD, RETENTION_DAYS,
+    )
